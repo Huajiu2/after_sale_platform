@@ -1,0 +1,36 @@
+# ====================== 后端 Java/Maven 忽略规则 ======================
+HELP.md
+target/
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# IDE 配置文件
+.idea/
+*.iws
+*.iml
+*.ipr
+.vscode/
+*.swp
+*.swo
+*~
+
+# ====================== 前端 Vue/afterscope 忽略规则 ======================
+# 依赖包（绝对不能提交）
+afterscope/node_modules/
+# 打包产物
+afterscope/dist/
+afterscope/build/
+# 环境配置文件
+afterscope/.env
+afterscope/.env.local
+afterscope/.env.development
+afterscope/.env.production
+# 日志和临时文件
+afterscope/npm-debug.log*
+afterscope/yarn-debug.log*
+afterscope/yarn-error.log*
+
+# ====================== 通用系统文件 ======================
+.DS_Store
+Thumbs.db
