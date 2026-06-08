@@ -2,6 +2,7 @@ package com.example.aftersight.controller;
 
 import com.example.aftersight.common.Result;
 import com.example.aftersight.service.DashboardService;
+import com.example.aftersight.vo.StatsVO;
 import com.example.aftersight.vo.StoreRankingVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -20,7 +21,20 @@ public class DashboardController {
     @Autowired
     private DashboardService dashboardService;
 
-    @GetMapping("store-ranking")
+    /**
+     * 仪表盘统计
+     */
+    @GetMapping("/stats")
+    public Result<StatsVO> getStats(){
+        return dashboardService.getStats();
+    }
+
+
+    /**
+     * 店铺售后排行top10
+     * @return
+     */
+    @GetMapping("/store-ranking")
     public Result<Map> getrank(){
         Map<String, Object> map = dashboardService.getrank();
         return Result.success(map);
