@@ -22,4 +22,26 @@
                  CROSS JOIN (SELECT @rank := 0) r
         ORDER BY t.orderCount DESC
     </select>
+
+    <select id="getTrendOrders" resultType="java.util.LinkedHashMap">
+        SELECT DATE(created_at) AS `date`, COUNT(*) AS cnt
+        FROM after_sale_order
+        WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+        GROUP BY DATE(created_at) ORDER BY `date`
+    </select>
+
+    <select id="getTrendAiCompleted" resultType="java.util.LinkedHashMap">
+        SELECT DATE(ai_audit_time) AS `date`, COUNT(*) AS cnt
+        FROM after_sale_order
+        WHERE ai_audit_status = 1 AND ai_audit_time >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+        GROUP BY DATE(ai_audit_time) ORDER BY `date`
+    </select>
+
+    <select id="getTrendPendingManual" resultType="java.util.LinkedHashMap">
+        SELECT DATE(ai_audit_time) AS `date`, COUNT(*) AS cnt
+        FROM after_sale_order
+        WHERE ticket_status = 2 AND ai_audit_time >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+        GROUP BY DATE(ai_audit_time) ORDER BY `date`
+    </select>
+
 </mapper>

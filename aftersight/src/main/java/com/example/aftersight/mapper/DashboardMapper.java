@@ -2,9 +2,11 @@ package com.example.aftersight.mapper;
 
 import com.example.aftersight.vo.StoreRankingVO;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
+import java.util.Map;
 
 @Mapper
 public interface DashboardMapper {
@@ -33,4 +35,18 @@ public interface DashboardMapper {
 
     @Select("select count(*) from dead_letter_message where date(error_time)=date_sub(curdate(), interval 1 day) and dlq_status=0")
     Integer getYesterdayDlq();
+
+    List<Map<String, Object>> getTrendOrders();
+
+    List<Map<String, Object>> getTrendAiCompleted();
+
+    List<Map<String, Object>> getTrendPendingManual();
+
+    @Select("select count(*) from after_sale_order where after_sale_type=1")
+    Integer getTypeCount1();
+    @Select("select count(*) from after_sale_order where after_sale_type=2")
+    Integer getTypeCount2();
+
+    @Select("select count(*) from after_sale_order where after_sale_type=3")
+    Integer getTypeCount3();
 }

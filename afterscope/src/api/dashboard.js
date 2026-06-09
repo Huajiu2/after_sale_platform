@@ -6,8 +6,8 @@ export function fetchStats() {
 }
 
 /** 5.2 近7日趋势图 */
-export function fetchTrend(days = 7) {
-  return request.get('/dashboard/trend', { params: { days } })
+export function fetchTrend() {
+  return request.get('/dashboard/trend')
 }
 
 /** 5.3 售后类型占比 */

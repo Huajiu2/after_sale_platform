@@ -155,7 +155,14 @@ function buildTrendData(data) {
 const pieOptions = {
   responsive: true,
   maintainAspectRatio: true,
-  plugins: { legend: { position: 'right' } }
+  plugins: {
+    legend: { position: 'right' },
+    tooltip: {
+      callbacks: {
+        label: (ctx) => ctx.parsed + '%'
+      }
+    }
+  }
 }
 const pieData = ref({ labels: [], datasets: [] })
 
@@ -164,9 +171,9 @@ function buildPieData(data) {
     labels: ['仅退款', '退货退款', '投诉'],
     datasets: [{
       data: [
-        data.refundOnly?.count || 0,
-        data.refundReturn?.count || 0,
-        data.complaint?.count || 0,
+        data.refundOnly?.ratio || 0,
+        data.refundReturn?.ratio || 0,
+        data.complaint?.ratio || 0,
       ],
       backgroundColor: ['#1890ff', '#fa8c16', '#ff4d4f'],
       borderWidth: 0,

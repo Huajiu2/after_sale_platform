@@ -4,14 +4,13 @@ import com.example.aftersight.common.Result;
 import com.example.aftersight.service.DashboardService;
 import com.example.aftersight.vo.StatsVO;
 import com.example.aftersight.vo.StoreRankingVO;
+import com.example.aftersight.vo.TrendVO;
+import com.example.aftersight.vo.TypeRatioVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -40,5 +39,19 @@ public class DashboardController {
         return Result.success(map);
     }
 
+    /**
+     * 近7日趋势图
+     */
+    @GetMapping("/trend")
+    public Result<TrendVO> getTrend(){
+         return dashboardService.getTrend();
+    }
 
+    /**
+     * 售后类型占比
+     */
+    @GetMapping("/type-ratio")
+    public Result<TypeRatioVO> getTypeRatio(){
+        return dashboardService.getTypeRatio();
+    }
 }

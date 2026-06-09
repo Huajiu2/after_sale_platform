@@ -3,8 +3,7 @@ package com.example.aftersight.service.impl;
 import com.example.aftersight.common.Result;
 import com.example.aftersight.mapper.DashboardMapper;
 import com.example.aftersight.service.DashboardService;
-import com.example.aftersight.vo.StatsVO;
-import com.example.aftersight.vo.StoreRankingVO;
+import com.example.aftersight.vo.*;
 import jakarta.annotation.Resource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -14,10 +13,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 @Service
@@ -105,6 +101,43 @@ public class DashboardServiceImpl implements DashboardService {
         return Math.round(trend * 100.0) / 100.0;
     }
 
+    /**
+     * 近 7 日趋势
+     */
+    @Override
+    public Result<TrendVO> getTrend() {
+
+        // 生成完整日期列表
+        List<LocalDate> dates = new ArrayList<>();
+        for (int i = 6; i >= 0; i--) {
+            dates.add(LocalDate.now().minusDays(i));
+        }
+
+        // DB 查询结果转 Map<日期字符串, 计数>
+        Map<String, Integer> ordersMap = toCountMap(dashboardMapper.getTrendOrders());
+        Map<String, Integer> aiMap = toCountMap(dashboardMapper.getTrendAiCompleted());
+        Map<String, Integer> pendingMap = toCountMap(dashboardMapper.getTrendPendingManual());
+
+        // 按日期顺序对齐，缺失补 0
+        TrendVO trendVO = new TrendVO();
+        trendVO.setDates(dates);
+        trendVO.setTotalOrders(dates.stream().map(d -> ordersMap.getOrDefault(d.toString(), 0)).toList());
+        trendVO.setAiCompleted(dates.stream().map(d -> aiMap.getOrDefault(d.toString(), 0)).toList());
+        trendVO.setManualPending(dates.stream().map(d -> pendingMap.getOrDefault(d.toString(), 0)).toList());
+
+        return Result.success(trendVO);
+    }
+
+    /**
+     * List&lt;Map(date, cnt)&gt; → Map&lt;date, count&gt;
+     */
+    private Map<String, Integer> toCountMap(List<Map<String, Object>> raw) {
+        Map<String, Integer> map = new HashMap<>();
+        if (raw == null) return map;
+        raw.forEach(m -> map.put(m.get("date").toString(), ((Number) m.get("cnt")).intValue()));
+        return map;
+    }
+
 
     /**
      * 店铺售后排行top10实现类
@@ -134,9 +167,30 @@ public class DashboardServiceImpl implements DashboardService {
             String s = objectMapper.writeValueAsString(vo);
             stringRedisTemplate.opsForZSet().add(key,s,vo.getOrderCount());
         });
+        stringRedisTemplate.expire(key,10,TimeUnit.MINUTES);
         Map<String, Object> map = new HashMap<>();
         map.put("rankMonth", LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMM")));
         map.put("list",rank);
         return map;
+    }
+
+
+    /**
+     * 售后类型占比实现类
+     */
+    @Override
+    public Result<TypeRatioVO> getTypeRatio() {
+        TypeRatioVO typeRatioVO = new TypeRatioVO();
+        Integer count1=dashboardMapper.getTypeCount1();
+        Integer count2=dashboardMapper.getTypeCount2();
+        Integer count3=dashboardMapper.getTypeCount3();
+        Double sum= Double.valueOf(count1+count2+count3);
+        Double ratio1=Math.round(count1/sum*100 * 10) / 10.0;
+        Double ratio2=Math.round(count2/sum*100 * 10) / 10.0;
+        Double ratio3=Math.round(count3/sum*100 * 10) / 10.0;
+        typeRatioVO.setRefundOnly(new TypeRatioItem(count1,ratio1));
+        typeRatioVO.setRefundReturn(new TypeRatioItem(count2,ratio2));
+        typeRatioVO.setComplaint(new TypeRatioItem(count3,ratio3));
+        return Result.success(typeRatioVO);
     }
 }
