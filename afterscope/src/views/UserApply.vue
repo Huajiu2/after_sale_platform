@@ -51,29 +51,46 @@
 
         <el-form-item label="凭证图片">
           <div class="image-upload">
-            <div
-              v-for="(url, idx) in form.evidenceImages"
-              :key="idx"
-              class="image-item"
-            >
-              <el-input
-                v-model="form.evidenceImages[idx]"
-                placeholder="输入图片 URL"
-                clearable
-              >
-                <template #prepend>{{ idx + 1 }}</template>
-                <template #append>
-                  <el-button @click="removeImage(idx)" text>✕</el-button>
-                </template>
-              </el-input>
+            <div class="upload-tip">
+              支持选择本地 <code>.jpg</code>、<code>.jpeg</code>、<code>.png</code>、<code>.gif</code> 文件，最多 5 张
             </div>
-            <el-button
-              v-if="form.evidenceImages.length < 5"
-              @click="addImage"
-              class="add-image-btn"
+
+            <div class="image-grid" v-if="images.length">
+              <div
+                v-for="(image, idx) in images"
+                :key="image.id"
+                class="image-item"
+              >
+                <div class="image-preview">
+                  <img :src="image.previewUrl" :alt="image.name" />
+                </div>
+                <div class="image-meta">
+                  <div class="image-name" :title="image.name">{{ image.name }}</div>
+                  <div class="image-size">{{ formatFileSize(image.size) }}</div>
+                </div>
+                <el-button class="remove-btn" type="danger" link @click="removeImage(idx)">
+                  移除
+                </el-button>
+              </div>
+            </div>
+
+            <el-upload
+              ref="uploadRef"
+              class="image-picker"
+              action="#"
+              :auto-upload="false"
+              :show-file-list="false"
+              multiple
+              accept=".jpg,.jpeg,.png,.gif,image/jpeg,image/png,image/gif"
+              :on-change="handleFileChange"
             >
-              + 添加图片（最多 5 张）
-            </el-button>
+              <el-button
+                v-if="images.length < 5"
+                class="add-image-btn"
+              >
+                + 选择图片文件
+              </el-button>
+            </el-upload>
           </div>
         </el-form-item>
 
@@ -91,8 +108,7 @@
       </el-form>
     </div>
 
-    <!-- 提交结果 -->
-    <el-dialog v-model="resultVisible" title="✅ 提交成功" width="480px">
+    <el-dialog v-model="resultVisible" title="提交成功" width="480px">
       <div class="result-body">
         <div class="result-icon">🎉</div>
         <p class="result-msg">{{ result.message }}</p>
@@ -117,10 +133,9 @@
       </template>
     </el-dialog>
 
-    <!-- 异常提示 -->
     <el-dialog v-model="errorVisible" title="提交失败" width="400px">
       <div class="result-body">
-        <div class="result-icon" style="font-size:48px;">😵</div>
+        <div class="result-icon" style="font-size:48px;">😟</div>
         <p class="result-msg" style="color:#ff4d4f;">{{ errorMsg }}</p>
       </div>
       <template #footer>
@@ -131,22 +146,23 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import request from '../utils/request'
 
 const typeOptions = [
   { value: 1, icon: '💰', label: '仅退款' },
   { value: 2, icon: '📦', label: '退货退款' },
-  { value: 3, icon: '⚠️', label: '投诉' },
+  { value: 3, icon: '❗', label: '投诉' },
 ]
 
 const formRef = ref(null)
+const uploadRef = ref(null)
+
 const form = reactive({
   orderNo: '',
   afterSaleType: null,
   applyReason: '',
-  evidenceImages: [],
 })
 
 const rules = {
@@ -160,6 +176,9 @@ const rules = {
 
 const submitting = ref(false)
 
+const images = ref([])
+let imageSeq = 0
+
 const resultVisible = ref(false)
 const result = reactive({
   message: '',
@@ -171,12 +190,66 @@ const result = reactive({
 const errorVisible = ref(false)
 const errorMsg = ref('')
 
-function addImage() {
-  form.evidenceImages.push('')
+function isAllowedImage(file) {
+  return ['image/jpeg', 'image/png', 'image/gif'].includes(file.type)
+}
+
+function formatFileSize(size) {
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  return `${(size / 1024 / 1024).toFixed(1)} MB`
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = () => reject(new Error('图片读取失败'))
+    reader.readAsDataURL(file)
+  })
+}
+
+async function handleFileChange(uploadFile, uploadFiles) {
+  const rawFile = uploadFile.raw
+  if (!rawFile) return
+
+  if (!isAllowedImage(rawFile)) {
+    ElMessage.warning('仅支持 JPG、JPEG、PNG、GIF 图片')
+    uploadRef.value?.handleRemove(uploadFile)
+    return
+  }
+
+  if (images.value.length >= 5) {
+    ElMessage.warning('最多只能添加 5 张图片')
+    uploadRef.value?.handleRemove(uploadFile)
+    return
+  }
+
+  if (images.value.some((item) => item.name === rawFile.name && item.size === rawFile.size)) {
+    ElMessage.info('这张图片已经添加过了')
+    uploadRef.value?.handleRemove(uploadFile)
+    return
+  }
+
+  try {
+    const previewUrl = await fileToDataUrl(rawFile)
+    images.value.push({
+      id: `${Date.now()}-${imageSeq += 1}`,
+      name: rawFile.name,
+      size: rawFile.size,
+      mimeType: rawFile.type,
+      file: rawFile,
+      previewUrl,
+    })
+  } catch (err) {
+    ElMessage.error(err?.message || '图片读取失败')
+  } finally {
+    uploadRef.value?.clearFiles()
+  }
 }
 
 function removeImage(idx) {
-  form.evidenceImages.splice(idx, 1)
+  images.value.splice(idx, 1)
 }
 
 async function handleSubmit() {
@@ -185,17 +258,19 @@ async function handleSubmit() {
 
   submitting.value = true
   try {
+    const evidenceImages = images.value.map((item) => item.previewUrl)
     const res = await request.post('/after-sale/submit', {
       orderNo: form.orderNo,
       afterSaleType: form.afterSaleType,
       applyReason: form.applyReason,
-      evidenceImages: form.evidenceImages.filter(Boolean),
+      evidenceImages,
     })
 
     if (res.code === 200) {
-      result.message = res.message
+      result.message = res.message || '提交成功'
       result.ticketNo = res.data.ticketNo
-      result.statusText = ['待AI审核', 'AI已办结', '待人工审核', '已驳回', '已关闭'][res.data.ticketStatus] || '未知'
+      result.statusText =
+        ['待AI审核', 'AI已办结', '待人工审核', '已驳回', '已关闭'][res.data.ticketStatus] || '未知'
       result.estimatedTime = res.data.estimatedTime || '30秒内出结果'
       resultVisible.value = true
     } else {
@@ -215,23 +290,40 @@ function resetForm() {
   form.orderNo = ''
   form.afterSaleType = null
   form.applyReason = ''
-  form.evidenceImages = []
-  formRef.value.resetFields()
+  images.value = []
+  formRef.value?.resetFields()
 }
 </script>
 
 <style scoped>
-.user-apply { max-width: 800px; margin: 0 auto; }
-.page-header { margin-bottom: 24px; }
-.page-header h1 { font-size: 22px; font-weight: 600; margin: 0; }
-.page-header p { color: #888; font-size: 14px; margin-top: 4px; }
+.user-apply {
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.page-header {
+  margin-bottom: 24px;
+}
+
+.page-header h1 {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.page-header p {
+  color: #888;
+  font-size: 14px;
+  margin-top: 4px;
+}
 
 .apply-card {
   background: #fff;
   border-radius: 12px;
   padding: 28px 32px;
-  box-shadow: 0 1px 4px rgba(0,0,0,.06);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 }
+
 .card-title {
   font-size: 16px;
   font-weight: 600;
@@ -242,7 +334,9 @@ function resetForm() {
 .type-options {
   display: flex;
   gap: 16px;
+  width: 100%;
 }
+
 .type-card {
   flex: 1;
   display: flex;
@@ -253,48 +347,132 @@ function resetForm() {
   border: 2px solid #e8e8e8;
   border-radius: 10px;
   cursor: pointer;
-  transition: all .2s;
+  transition: all 0.2s;
   background: #fafafa;
 }
+
 .type-card:hover {
   border-color: #91d5ff;
   background: #e6f7ff;
 }
+
 .type-card.active {
   border-color: #1890ff;
   background: #e6f7ff;
-  box-shadow: 0 0 0 2px rgba(24,144,255,.15);
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.15);
 }
-.type-icon { font-size: 28px; }
-.type-label { font-size: 14px; font-weight: 600; color: #333; white-space: nowrap; }
+
+.type-icon {
+  font-size: 28px;
+}
+
+.type-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  white-space: nowrap;
+}
 
 .image-upload {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
   width: 100%;
 }
-.image-item :deep(.el-input-group__prepend) {
-  width: 36px;
-  text-align: center;
+
+.upload-tip {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 12px;
 }
+
+.image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.image-item {
+  border: 1px solid #ebeef5;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fafafa;
+}
+
+.image-preview {
+  height: 140px;
+  background: #f5f7fa;
+}
+
+.image-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.image-meta {
+  padding: 10px 12px 8px;
+}
+
+.image-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.image-size {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #909399;
+}
+
+.remove-btn {
+  width: 100%;
+  border-top: 1px solid #ebeef5;
+  border-radius: 0;
+  padding: 10px 0;
+}
+
+.image-picker {
+  display: block;
+}
+
 .add-image-btn {
   width: 100%;
   border-style: dashed !important;
-  color: #888;
+  color: #666;
 }
 
-.submit-btn { width: 100%; margin-top: 8px; }
+.submit-btn {
+  width: 100%;
+  margin-top: 8px;
+}
 
-.result-body { text-align: center; padding: 16px 0; }
-.result-icon { font-size: 56px; margin-bottom: 12px; }
-.result-msg { font-size: 16px; color: #333; margin-bottom: 20px; }
+.result-body {
+  text-align: center;
+  padding: 16px 0;
+}
+
+.result-icon {
+  font-size: 56px;
+  margin-bottom: 12px;
+}
+
+.result-msg {
+  font-size: 16px;
+  color: #333;
+  margin-bottom: 20px;
+}
+
 .result-detail {
   background: #fafafa;
   border-radius: 8px;
   padding: 16px 20px;
   text-align: left;
 }
+
 .result-row {
   display: flex;
   justify-content: space-between;
@@ -302,7 +480,19 @@ function resetForm() {
   padding: 8px 0;
   border-bottom: 1px solid #f0f0f0;
 }
-.result-row:last-child { border: none; }
-.result-label { color: #888; font-size: 14px; }
-.result-value { font-weight: 600; color: #333; font-size: 14px; }
+
+.result-row:last-child {
+  border: none;
+}
+
+.result-label {
+  color: #888;
+  font-size: 14px;
+}
+
+.result-value {
+  font-weight: 600;
+  color: #333;
+  font-size: 14px;
+}
 </style>
