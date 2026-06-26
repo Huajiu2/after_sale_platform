@@ -4,11 +4,12 @@ import com.example.aftersight.common.Result;
 import com.example.aftersight.mapper.DashboardMapper;
 import com.example.aftersight.service.DashboardService;
 import com.example.aftersight.vo.*;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Resource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
-import tools.jackson.databind.ObjectMapper;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -33,7 +34,7 @@ public class DashboardServiceImpl implements DashboardService {
      * 仪表盘统计实现类
      */
     @Override
-    public Result<StatsVO> getStats() {
+    public Result<StatsVO> getStats() throws JsonProcessingException {
         StatsVO statsVO = new StatsVO();
 
         String key=STATS_KEY_PREFIX;
@@ -153,7 +154,15 @@ public class DashboardServiceImpl implements DashboardService {
         if (ranking!=null&&!ranking.isEmpty()){
             //从redis中查询到了数据
             List<StoreRankingVO> list = ranking.stream()
-                    .map(json -> objectMapper.readValue(json, StoreRankingVO.class))
+                    .map(json -> {
+                        try {
+                            return objectMapper.readValue(json, StoreRankingVO.class);
+                        } catch (JsonProcessingException e) {
+                            e.printStackTrace();
+                            return null;
+                        }
+                    })
+                    .filter(Objects::nonNull)
                     .toList();
             Map<String, Object> map = new HashMap<>();
             map.put("rankMonth", LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMM")));
@@ -164,7 +173,12 @@ public class DashboardServiceImpl implements DashboardService {
         List<StoreRankingVO> rank = dashboardMapper.getrank();
         rank.stream().forEach(vo->
         {
-            String s = objectMapper.writeValueAsString(vo);
+            String s = null;
+            try {
+                s = objectMapper.writeValueAsString(vo);
+            } catch (JsonProcessingException e) {
+                e.printStackTrace();
+            }
             stringRedisTemplate.opsForZSet().add(key,s,vo.getOrderCount());
         });
         stringRedisTemplate.expire(key,10,TimeUnit.MINUTES);

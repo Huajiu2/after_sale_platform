@@ -6,6 +6,7 @@ import com.example.aftersight.vo.StatsVO;
 import com.example.aftersight.vo.StoreRankingVO;
 import com.example.aftersight.vo.TrendVO;
 import com.example.aftersight.vo.TypeRatioVO;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -24,7 +25,7 @@ public class DashboardController {
      * 仪表盘统计
      */
     @GetMapping("/stats")
-    public Result<StatsVO> getStats(){
+    public Result<StatsVO> getStats() throws JsonProcessingException {
         return dashboardService.getStats();
     }
 

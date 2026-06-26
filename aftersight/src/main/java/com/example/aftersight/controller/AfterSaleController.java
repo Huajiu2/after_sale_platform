@@ -2,20 +2,27 @@ package com.example.aftersight.controller;
 
 import com.example.aftersight.common.Result;
 import com.example.aftersight.dto.SubmitDTO;
+import com.example.aftersight.service.AfterSaleService;
 import com.example.aftersight.vo.SubmitVO;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/after-sale")
 public class AfterSaleController {
 
-    @PostMapping("/submit")
-    public Result<SubmitVO> submit(@RequestBody SubmitDTO submitDTO){
-        SubmitVO submitVO = new SubmitVO();
+    @Autowired
+    private AfterSaleService afterSaleService;
 
-        return Result.success(submitVO);
+    /**
+     * 用户提交售后申请
+     * @param submitDTO
+     * @return
+     */
+    @PostMapping(value = "/submit", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Result<SubmitVO> submit(@ModelAttribute SubmitDTO submitDTO){
+        return afterSaleService.submit(submitDTO);
+
     }
 }

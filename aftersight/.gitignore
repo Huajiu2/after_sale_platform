@@ -4,6 +4,9 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 
+# 屏蔽本地开发环境配置（避免泄露密钥）
+**/application-dev.yml
+
 ### STS ###
 .apt_generated
 .classpath

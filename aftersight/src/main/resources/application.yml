@@ -18,6 +18,16 @@ spring:
           max-idle: 8
           min-idle: 2
           max-wait: -1ms
+  profiles:
+    active: dev
+#  main:
+#    allow-bean-definition-overriding: true
+aliyun:
+  oss:
+    endpoint: "https://oss-cn-hangzhou.aliyuncs.com"
+    access-key-id: yourOSS_ACCESS_KEY_ID
+    access-key-secret: yourOSS_ACCESS_KEY_SECRET
+    bucket-name: tklias
 mybatis:
   mapper-locations: classpath:mapper/**/*.xml
   configuration:

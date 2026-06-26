@@ -258,13 +258,15 @@ async function handleSubmit() {
 
   submitting.value = true
   try {
-    const evidenceImages = images.value.map((item) => item.previewUrl)
-    const res = await request.post('/after-sale/submit', {
-      orderNo: form.orderNo,
-      afterSaleType: form.afterSaleType,
-      applyReason: form.applyReason,
-      evidenceImages,
+    const formData = new FormData()
+    formData.append('orderNo', form.orderNo)
+    formData.append('afterSaleType', form.afterSaleType)
+    formData.append('applyReason', form.applyReason)
+    images.value.forEach((item) => {
+      formData.append('evidenceFiles', item.file)
     })
+
+    const res = await request.post('/after-sale/submit', formData)
 
     if (res.code === 200) {
       result.message = res.message || '提交成功'
