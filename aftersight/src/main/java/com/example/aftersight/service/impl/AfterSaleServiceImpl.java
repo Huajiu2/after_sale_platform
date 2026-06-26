@@ -158,4 +158,9 @@ public class AfterSaleServiceImpl implements AfterSaleService {
     /**
      * 工单列表分页查询实现类
      */
+    @Override
+    public List<AfterSaleOrder> getAfterSaleOrder() {
+        return afterSaleMapper.getAfterSaleOrder();
+    }
+
 }

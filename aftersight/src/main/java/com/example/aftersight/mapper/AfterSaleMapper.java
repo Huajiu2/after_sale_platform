@@ -44,4 +44,8 @@ public interface AfterSaleMapper {
             "        #{retryCount}\n" +
             "    )")
     void addAfterSaleOrder(AfterSaleOrder afterSaleOrder);
+
+    @Select("select * from after_sale_order order by created_at desc ")
+    List<AfterSaleOrder> getAfterSaleOrder();
+
 }
