@@ -32,3 +32,9 @@ mybatis:
   mapper-locations: classpath:mapper/**/*.xml
   configuration:
     map-underscore-to-camel-case: true
+
+pagehelper:
+  helper-dialect: mysql
+  reasonable: true          #   页码小于1查第一页，大于总页数查最后一页
+  supportMethodsArguments: true   #   允许把分页参数直接放到 Mapper 方法参数里
+  params: count=countSql    #   用于自定义 count 统计 SQL，优化大表分页计数

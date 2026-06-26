@@ -117,6 +117,8 @@ const activeMenu = computed(() => route.path)
 .main {
   margin-left: 240px;
   flex: 1;
+  min-width: 0;
+  overflow-x: hidden;
   padding: 24px 32px;
   min-height: 100vh;
 }

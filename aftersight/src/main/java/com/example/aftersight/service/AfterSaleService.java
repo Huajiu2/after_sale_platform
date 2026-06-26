@@ -2,8 +2,13 @@ package com.example.aftersight.service;
 
 import com.example.aftersight.common.Result;
 import com.example.aftersight.dto.SubmitDTO;
+import com.example.aftersight.entity.AfterSaleOrder;
 import com.example.aftersight.vo.SubmitVO;
+
+import java.util.List;
 
 public interface AfterSaleService {
     Result<SubmitVO> submit(SubmitDTO submitDTO);
+
+    List<AfterSaleOrder> getAfterSaleOrder();
 }
