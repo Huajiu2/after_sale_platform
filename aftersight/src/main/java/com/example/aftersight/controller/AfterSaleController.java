@@ -5,6 +5,7 @@ import com.example.aftersight.common.Result;
 import com.example.aftersight.dto.SubmitDTO;
 import com.example.aftersight.entity.AfterSaleOrder;
 import com.example.aftersight.service.AfterSaleService;
+import com.example.aftersight.vo.AfterSaleDetailVO;
 import com.example.aftersight.vo.SubmitVO;
 import com.github.pagehelper.PageHelper;
 import com.github.pagehelper.PageInfo;
@@ -48,5 +49,13 @@ public class AfterSaleController {
         pageResult.setPages(pageInfo.getPages());
         pageResult.setTotal(pageInfo.getTotal());
         return Result.success(pageResult);
+    }
+
+    /**
+     * 工单详情查询
+     */
+    @GetMapping("/detail/{ticketNo}")
+    public Result<AfterSaleDetailVO> getAfterSaleOrderDetail(@PathVariable String ticketNo){
+        return afterSaleService.getAfterSaleOrderDetail(ticketNo);
     }
 }

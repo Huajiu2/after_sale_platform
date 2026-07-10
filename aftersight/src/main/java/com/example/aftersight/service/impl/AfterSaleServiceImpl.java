@@ -7,6 +7,7 @@ import com.example.aftersight.entity.OrderInfo;
 import com.example.aftersight.mapper.AfterSaleMapper;
 import com.example.aftersight.service.AfterSaleService;
 import com.example.aftersight.utils.ImageUploadUtils;
+import com.example.aftersight.vo.AfterSaleDetailVO;
 import com.example.aftersight.vo.SubmitVO;
 import com.google.gson.Gson;
 import jakarta.annotation.Resource;
@@ -140,6 +141,8 @@ public class AfterSaleServiceImpl implements AfterSaleService {
 
         afterSaleMapper.addAfterSaleOrder(afterSaleOrder);
 
+        //投递MQ消息
+
         submitVO.setTicketStatus(0);
         submitVO.setEstimatedTime("30秒内出结果");
         submitVO.setMessage("售后申请提交成功！");
@@ -163,4 +166,11 @@ public class AfterSaleServiceImpl implements AfterSaleService {
         return afterSaleMapper.getAfterSaleOrder();
     }
 
+    @Override
+    public Result<AfterSaleDetailVO> getAfterSaleOrderDetail(String ticketNo) {
+        AfterSaleDetailVO afterSaleDetailVO = new AfterSaleDetailVO();
+        afterSaleDetailVO.setTicketNo(ticketNo);
+
+        return Result.success(afterSaleDetailVO);
+    }
 }

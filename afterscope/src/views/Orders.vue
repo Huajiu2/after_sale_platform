@@ -1,17 +1,18 @@
 <template>
   <div class="orders-page">
-    <div class="page-header">
-      <div class="page-title">
+    <section class="workbench-head">
+      <div class="title-block">
+        <div class="eyebrow">AFTER-SALE OPERATIONS</div>
         <h1>售后工单管理</h1>
-        <p>围绕工单查询、AI审核追溯、人工复核和批量处理的运营工作台</p>
+        <p>多条件筛选、AI 审核链路追溯、人工干预处理和批量运维入口。</p>
       </div>
-      <div class="header-actions">
+      <div class="head-actions">
         <el-button :icon="Refresh" @click="loadTickets">刷新</el-button>
         <el-button type="primary" :icon="Download" @click="handleExport">导出 Excel</el-button>
       </div>
-    </div>
+    </section>
 
-    <div class="metrics-row">
+    <section class="metrics-row">
       <div v-for="item in metrics" :key="item.label" class="metric-card">
         <div class="metric-icon" :style="{ background: item.bg, color: item.color }">
           <component :is="item.icon" />
@@ -21,12 +22,16 @@
           <span>{{ item.label }}</span>
         </div>
       </div>
-    </div>
+    </section>
 
-    <el-card class="filter-card" shadow="never">
+    <el-card class="filter-card surface-card" shadow="never">
       <template #header>
         <div class="card-header">
-          <span>筛选条件</span>
+          <div>
+            <span class="card-title">筛选条件</span>
+            <small>对应接口：GET /api/after-sale/list</small>
+          </div>
+          <el-tag type="info" effect="plain">共 {{ pager.total }} 条</el-tag>
         </div>
       </template>
 
@@ -89,11 +94,16 @@
       </el-form>
     </el-card>
 
-    <el-card class="table-card" shadow="never">
+    <el-card class="table-card surface-card" shadow="never">
       <template #header>
         <div class="card-header">
-          <span>工单列表</span>
-          <span class="selection-text">已选 {{ selectedRows.length }} 条 / 共 {{ pager.total }} 条</span>
+          <div>
+            <span class="card-title">工单列表</span>
+            <small>已选 {{ selectedRows.length }} 条</small>
+          </div>
+          <div class="table-tools">
+            <el-tag type="primary" effect="plain">第 {{ pager.page }} 页</el-tag>
+          </div>
         </div>
       </template>
 
@@ -103,29 +113,32 @@
         row-key="ticketNo"
         class="ticket-table"
         empty-text="暂无工单数据"
+        table-layout="fixed"
         @selection-change="selectedRows = $event"
       >
-        <el-table-column type="selection" width="44" />
-        <el-table-column prop="ticketNo" label="工单号" min-width="145">
+        <el-table-column type="selection" width="36" />
+        <el-table-column prop="ticketNo" label="工单号" width="128">
           <template #default="{ row }">
-            <button class="link-button" @click="openDetail(row.ticketNo)">{{ row.ticketNo }}</button>
+            <button class="ticket-link" @click="openDetail(row.ticketNo)">{{ row.ticketNo }}</button>
           </template>
         </el-table-column>
-        <el-table-column prop="orderNo" label="订单号" min-width="116" />
-        <el-table-column prop="storeName" label="店铺" min-width="150" show-overflow-tooltip />
-        <el-table-column label="售后类型" min-width="100">
+        <el-table-column prop="orderNo" label="订单号" width="104" />
+        <el-table-column prop="storeName" label="店铺" min-width="130" show-overflow-tooltip />
+        <el-table-column label="售后类型" width="92">
           <template #default="{ row }">
-            <el-tag :type="typeTag(row.afterSaleType)" effect="plain">{{ row.afterSaleTypeDesc || '-' }}</el-tag>
+            <el-tag :type="typeTag(row.afterSaleType)" effect="plain" round>
+              {{ row.afterSaleTypeDesc || afterSaleTypeText(row.afterSaleType) }}
+            </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="applyReason" label="申请原因" min-width="190" show-overflow-tooltip />
-        <el-table-column label="凭证" width="72">
+        <el-table-column prop="applyReason" label="申请原因" min-width="150" show-overflow-tooltip />
+        <el-table-column label="凭证" width="62">
           <template #default="{ row }">
-            <el-tag v-if="row.hasEvidence" type="success" effect="plain">有</el-tag>
-            <el-tag v-else type="info" effect="plain">无</el-tag>
+            <el-tag v-if="hasEvidence(row)" type="success" effect="plain" round>有</el-tag>
+            <el-tag v-else type="info" effect="plain" round>无</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="AI审核" min-width="132">
+        <el-table-column label="AI审核" min-width="118">
           <template #default="{ row }">
             <div class="ai-result">
               <span>{{ row.aiAuditResult || '待审核' }}</span>
@@ -133,17 +146,25 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="状态" min-width="112">
+        <el-table-column label="状态" width="108">
           <template #default="{ row }">
-            <el-tag :type="statusTag(row.ticketStatus)" effect="light">{{ row.ticketStatusDesc || '-' }}</el-tag>
+            <el-tag :type="statusTag(row.ticketStatus)" effect="light" round>
+              {{ row.ticketStatusDesc || ticketStatusText(row.ticketStatus) }}
+            </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="createdAt" label="创建时间" min-width="150" />
-        <el-table-column label="操作" width="142" fixed="right">
+        <el-table-column prop="createdAt" label="创建时间" width="128">
           <template #default="{ row }">
-            <el-button link type="primary" @click="openDetail(row.ticketNo)">详情</el-button>
-            <el-button v-if="row.ticketStatus === 2" link type="warning" @click="openAudit(row)">审核</el-button>
-            <el-button v-if="row.ticketStatus === 0" link type="success" @click="retrySingle(row)">重试</el-button>
+            <span class="time-text">{{ formatTableTime(row.createdAt) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="112">
+          <template #default="{ row }">
+            <div class="row-actions">
+              <el-button link type="primary" @click="openDetail(row.ticketNo)">详情</el-button>
+              <el-button v-if="row.ticketStatus === 2" link type="warning" @click="openAudit(row)">审核</el-button>
+              <el-button v-if="row.ticketStatus === 0" link type="success" @click="retrySingle(row)">重试</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -165,8 +186,9 @@
       <div v-if="activeDetail" class="drawer-body">
         <div class="drawer-header">
           <div>
-            <h2>工单详情</h2>
-            <p>{{ activeDetail.ticketNo }} / {{ activeDetail.ticketStatusDesc }}</p>
+            <span>工单详情</span>
+            <h2>{{ activeDetail.ticketNo }}</h2>
+            <p>{{ activeDetail.ticketStatusDesc || ticketStatusText(activeDetail.ticketStatus) }}</p>
           </div>
           <el-button circle :icon="Close" @click="detailVisible = false" />
         </div>
@@ -523,6 +545,36 @@ function statusTag(status) {
   return map[status] || 'info'
 }
 
+function afterSaleTypeText(type) {
+  const map = {
+    1: '仅退款',
+    2: '退货退款',
+    3: '投诉'
+  }
+  return map[type] || '-'
+}
+
+function ticketStatusText(status) {
+  const map = {
+    0: '待AI审核',
+    1: 'AI已办结',
+    2: '待人工审核',
+    3: '已驳回',
+    4: '已关闭'
+  }
+  return map[status] || '-'
+}
+
+function hasEvidence(row) {
+  if (typeof row.hasEvidence === 'boolean') return row.hasEvidence
+  return !!row.evidenceImages
+}
+
+function formatTableTime(value) {
+  if (!value) return '-'
+  return String(value).slice(0, 16)
+}
+
 onMounted(async () => {
   await Promise.all([loadOptions(), loadTickets()])
 })
@@ -533,35 +585,68 @@ onMounted(async () => {
   width: 100%;
   max-width: 100%;
   min-width: 0;
-}
-
-.page-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 20px;
-  min-width: 0;
-}
-
-.page-title {
-  min-width: 0;
-}
-
-.page-header h1 {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 700;
   color: #1f2a37;
 }
 
-.page-header p {
-  margin: 6px 0 0;
-  color: #7b8494;
+.workbench-head {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 22px 24px;
+  margin-bottom: 18px;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(24, 144, 255, .12), rgba(82, 196, 26, .07)),
+    #fff;
+  border: 1px solid #e7edf5;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(22, 39, 65, .06);
+}
+
+.workbench-head::after {
+  content: "";
+  position: absolute;
+  right: -90px;
+  top: -120px;
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, rgba(24, 144, 255, .2), rgba(24, 144, 255, 0) 66%);
+  pointer-events: none;
+}
+
+.title-block {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+}
+
+.eyebrow {
+  margin-bottom: 8px;
+  color: #1677ff;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.workbench-head h1 {
+  margin: 0;
+  font-size: 26px;
+  line-height: 1.25;
+  font-weight: 800;
+  color: #102033;
+}
+
+.workbench-head p {
+  margin: 8px 0 0;
+  color: #64748b;
   font-size: 14px;
 }
 
-.header-actions {
+.head-actions {
+  position: relative;
+  z-index: 1;
   display: flex;
   gap: 8px;
   flex-shrink: 0;
@@ -569,7 +654,7 @@ onMounted(async () => {
 
 .metrics-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(154px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(156px, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -577,22 +662,29 @@ onMounted(async () => {
 .metric-card {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
-  padding: 14px;
+  padding: 16px;
   background: #fff;
-  border: 1px solid #edf0f5;
+  border: 1px solid #e8edf5;
   border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(22, 39, 65, .04);
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+
+.metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(22, 39, 65, .08);
 }
 
 .metric-icon {
-  width: 38px;
-  height: 38px;
+  width: 42px;
+  height: 42px;
   border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: 20px;
   flex-shrink: 0;
 }
 
@@ -602,14 +694,15 @@ onMounted(async () => {
 
 .metric-card strong {
   display: block;
-  font-size: 21px;
+  color: #102033;
+  font-size: 24px;
   line-height: 1;
-  color: #1f2a37;
+  font-weight: 800;
 }
 
 .metric-card span {
   display: block;
-  margin-top: 5px;
+  margin-top: 6px;
   color: #7b8494;
   font-size: 13px;
   white-space: nowrap;
@@ -617,14 +710,23 @@ onMounted(async () => {
   text-overflow: ellipsis;
 }
 
-.filter-card,
-.table-card {
+.surface-card {
   max-width: 100%;
   min-width: 0;
   overflow: hidden;
-  border: 1px solid #edf0f5;
-  border-radius: 8px;
+  border: 1px solid #e8edf5;
+  border-radius: 10px;
   margin-bottom: 16px;
+  box-shadow: 0 10px 28px rgba(22, 39, 65, .05);
+}
+
+.surface-card :deep(.el-card__header) {
+  padding: 18px 22px;
+  border-bottom: 1px solid #edf1f7;
+}
+
+.surface-card :deep(.el-card__body) {
+  padding: 18px 22px;
 }
 
 .card-header {
@@ -633,8 +735,21 @@ onMounted(async () => {
   justify-content: space-between;
   gap: 12px;
   min-width: 0;
-  font-weight: 600;
-  color: #1f2a37;
+}
+
+.card-title {
+  display: block;
+  color: #102033;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.card-header small {
+  display: block;
+  margin-top: 4px;
+  color: #8a94a6;
+  font-size: 12px;
+  font-weight: 400;
 }
 
 .filter-form {
@@ -643,6 +758,11 @@ onMounted(async () => {
 
 .filter-form :deep(.el-form-item) {
   margin-bottom: 14px;
+}
+
+.filter-form :deep(.el-form-item__label) {
+  color: #536174;
+  font-weight: 600;
 }
 
 .filter-form :deep(.el-form-item__content) {
@@ -654,6 +774,17 @@ onMounted(async () => {
 .filter-form :deep(.el-date-editor) {
   width: 100%;
   max-width: 100%;
+}
+
+.filter-form :deep(.el-input__wrapper),
+.filter-form :deep(.el-date-editor.el-input__wrapper) {
+  border-radius: 7px;
+  box-shadow: 0 0 0 1px #dbe2ec inset;
+}
+
+.filter-form :deep(.el-input__wrapper:hover),
+.filter-form :deep(.el-date-editor.el-input__wrapper:hover) {
+  box-shadow: 0 0 0 1px #8cc8ff inset;
 }
 
 .action-form-item :deep(.el-form-item__content) {
@@ -671,11 +802,8 @@ onMounted(async () => {
   margin-left: 0;
 }
 
-.selection-text {
-  color: #7b8494;
-  font-size: 13px;
-  font-weight: 400;
-  white-space: nowrap;
+.table-tools {
+  flex-shrink: 0;
 }
 
 .ticket-table {
@@ -683,38 +811,99 @@ onMounted(async () => {
   max-width: 100%;
 }
 
-.link-button {
+.ticket-table :deep(.el-table__inner-wrapper),
+.ticket-table :deep(.el-table__body-wrapper),
+.ticket-table :deep(.el-scrollbar__wrap) {
+  overflow-x: hidden;
+}
+
+.ticket-table :deep(.el-table__header th) {
+  background: #f8fafc;
+  color: #687386;
+  font-weight: 800;
+}
+
+.ticket-table :deep(.el-table__cell) {
+  padding: 10px 0;
+}
+
+.ticket-table :deep(.cell) {
+  padding: 0 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ticket-table :deep(.el-table__row) {
+  transition: background .18s ease;
+}
+
+.ticket-table :deep(.el-table__row:hover > td.el-table__cell) {
+  background: #f7fbff;
+}
+
+.ticket-link {
+  display: inline-block;
+  max-width: 100%;
   padding: 0;
   border: 0;
   background: transparent;
   color: #1677ff;
   cursor: pointer;
   font: inherit;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+.ticket-link:hover {
+  color: #0958d9;
 }
 
 .ai-result {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   min-width: 0;
 }
 
 .ai-result span {
   overflow: hidden;
+  color: #243244;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .ai-result small {
-  color: #7b8494;
+  color: #6b7a90;
+}
+
+.time-text {
+  color: #4b5563;
+  font-size: 13px;
+}
+
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.row-actions :deep(.el-button) {
+  margin-left: 0;
+  padding: 0;
 }
 
 .pagination-row {
   display: flex;
   justify-content: flex-end;
   max-width: 100%;
-  overflow-x: auto;
-  padding-top: 16px;
+  overflow-x: hidden;
+  padding-top: 18px;
 }
 
 .drawer-body {
@@ -728,12 +917,22 @@ onMounted(async () => {
   align-items: flex-start;
   justify-content: space-between;
   margin-bottom: 18px;
+  padding: 18px;
+  background: #fff;
+  border: 1px solid #e8edf5;
+  border-radius: 10px;
+}
+
+.drawer-header span {
+  color: #1677ff;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .drawer-header h2 {
-  margin: 0;
+  margin: 4px 0 0;
+  color: #102033;
   font-size: 22px;
-  color: #1f2a37;
 }
 
 .drawer-header p {
@@ -744,15 +943,15 @@ onMounted(async () => {
 .detail-section {
   padding: 18px;
   background: #fff;
-  border: 1px solid #edf0f5;
-  border-radius: 8px;
+  border: 1px solid #e8edf5;
+  border-radius: 10px;
   margin-bottom: 14px;
 }
 
 .section-title {
   margin-bottom: 14px;
-  font-weight: 700;
-  color: #1f2a37;
+  color: #102033;
+  font-weight: 800;
 }
 
 .apply-box {
@@ -850,7 +1049,7 @@ onMounted(async () => {
 
 .audit-box h3 {
   margin: 0 0 8px;
-  color: #1f2a37;
+  color: #102033;
 }
 
 .audit-box p {
@@ -878,16 +1077,16 @@ onMounted(async () => {
 }
 
 @media (max-width: 900px) {
-  .page-header {
+  .workbench-head {
     flex-direction: column;
   }
 
-  .header-actions {
+  .head-actions {
     width: 100%;
     flex-wrap: wrap;
   }
 
-  .header-actions .el-button {
+  .head-actions .el-button {
     flex: 1;
   }
 
