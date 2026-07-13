@@ -4,11 +4,12 @@ import com.example.aftersight.common.Result;
 import com.example.aftersight.dto.SubmitDTO;
 import com.example.aftersight.entity.AfterSaleOrder;
 import com.example.aftersight.entity.OrderInfo;
+import com.example.aftersight.enums.AfterSaleTypeEnum;
+import com.example.aftersight.enums.TicketStatusEnum;
 import com.example.aftersight.mapper.AfterSaleMapper;
 import com.example.aftersight.service.AfterSaleService;
 import com.example.aftersight.utils.ImageUploadUtils;
-import com.example.aftersight.vo.AfterSaleDetailVO;
-import com.example.aftersight.vo.SubmitVO;
+import com.example.aftersight.vo.*;
 import com.google.gson.Gson;
 import jakarta.annotation.Resource;
 import org.redisson.api.RBloomFilter;
@@ -18,6 +19,7 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -66,6 +68,7 @@ public class AfterSaleServiceImpl implements AfterSaleService {
      * @return
      */
     @Override
+    @Transactional
     public Result<SubmitVO> submit(SubmitDTO submitDTO) {
         SubmitVO submitVO = new SubmitVO();
         List<String> imageUrl = new ArrayList<>();
@@ -79,7 +82,8 @@ public class AfterSaleServiceImpl implements AfterSaleService {
         //布隆过滤器过滤不存在的订单
         RBloomFilter<Object> bloom = redissonClient.getBloomFilter("bloom:order_no");
         bloom.tryInit(1000000, 0.03);
-        //addOrderNos(bloom, nos);  //todo 只执行一次，后面会注释掉这一行
+        //todo 只执行一次，后面会注释掉这一行
+        //addOrderNos(bloom, nos);
         boolean contains = bloom.contains(orderNo);
         if (!contains) {
             return Result.fail(400, "订单号不存在");
@@ -111,8 +115,11 @@ public class AfterSaleServiceImpl implements AfterSaleService {
         MultipartFile[] files = submitDTO.getEvidenceFiles();
         if (files != null) {
             for (MultipartFile evidenceFile : files) {
+                if (evidenceFile.isEmpty()) continue;
                 String image = uploadUtils.uploadImage(evidenceFile, evidenceFile.getOriginalFilename());
-                imageUrl.add(image);
+                if (org.springframework.util.StringUtils.hasText(image)) {
+                    imageUrl.add(image);
+                }
             }
         }
 
@@ -162,14 +169,57 @@ public class AfterSaleServiceImpl implements AfterSaleService {
      * 工单列表分页查询实现类
      */
     @Override
-    public List<AfterSaleOrder> getAfterSaleOrder() {
+    public List<AfterSaleOrderListVO> getAfterSaleOrder() {
         return afterSaleMapper.getAfterSaleOrder();
     }
 
+
+    /**
+     * 工单列表详情查询实现类
+     * @param ticketNo
+     * @return
+     */
+    @Transactional
     @Override
     public Result<AfterSaleDetailVO> getAfterSaleOrderDetail(String ticketNo) {
+        //ticketNo,orderInfo{},afterSaleInfo{}
         AfterSaleDetailVO afterSaleDetailVO = new AfterSaleDetailVO();
         afterSaleDetailVO.setTicketNo(ticketNo);
+
+        AfterSaleOrder afterSaleOrder=afterSaleMapper.getByTicketNo(ticketNo);
+        if (afterSaleOrder==null){
+            return Result.fail(400,"工单不存在");
+        }
+        //orderInfo{}  订单信息
+        String orderNo = afterSaleMapper.getOrderNo(ticketNo);
+        OrderInfoVO orderInfoVO = afterSaleMapper.getOrderVO(orderNo);
+        afterSaleDetailVO.setOrderInfo(orderInfoVO);
+
+        //afterSaleInfo{}  售后工单信息
+        AfterSaleInfoVO afterSaleInfoVO = new AfterSaleInfoVO();
+        afterSaleInfoVO.setAfterSaleType(afterSaleOrder.getAfterSaleType());
+        AfterSaleTypeEnum typeEnum = AfterSaleTypeEnum.fromCode(afterSaleOrder.getAfterSaleType());
+        afterSaleInfoVO.setAfterSaleTypeDesc(typeEnum != null ? typeEnum.getDesc() : "");
+        afterSaleInfoVO.setApplyReason(afterSaleOrder.getApplyReason());
+        // evidenceImages 数据库存的是 JSON 字符串，转为 List
+        String evidenceJson = afterSaleOrder.getEvidenceImages();
+        if (StringUtils.hasText(evidenceJson)) {
+            afterSaleInfoVO.setEvidenceImages(new Gson().fromJson(evidenceJson, List.class));
+        } else {
+            afterSaleInfoVO.setEvidenceImages(new ArrayList<>());
+        }
+        afterSaleInfoVO.setApplyAmount(afterSaleOrder.getApplyAmount());
+        afterSaleDetailVO.setAfterSaleInfo(afterSaleInfoVO);
+
+        //ragEvidence   RAG证据
+        afterSaleDetailVO.setRagEvidence(new ArrayList<>());
+
+        //AI审核详情
+
+        afterSaleDetailVO.setTicketStatus(afterSaleOrder.getTicketStatus());
+        TicketStatusEnum ticketEnum = TicketStatusEnum.fromCode(afterSaleOrder.getTicketStatus());
+        afterSaleDetailVO.setTicketStatusDesc(typeEnum != null ? typeEnum.getDesc() : "");
+        afterSaleDetailVO.setCreatedAt(afterSaleOrder.getCreatedAt());
 
         return Result.success(afterSaleDetailVO);
     }

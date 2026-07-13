@@ -2,6 +2,8 @@ package com.example.aftersight.mapper;
 
 import com.example.aftersight.entity.AfterSaleOrder;
 import com.example.aftersight.entity.OrderInfo;
+import com.example.aftersight.vo.AfterSaleOrderListVO;
+import com.example.aftersight.vo.OrderInfoVO;
 import com.example.aftersight.vo.SubmitVO;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Select;
@@ -13,8 +15,15 @@ public interface AfterSaleMapper {
     @Select("select order_no from order_info")
     List<String> selectAllOrderNos();
 
-    @Select("select * from order_info where order_no=#{orderNo}")
+    @Select("SELECT o.order_no, o.product_name, o.product_spec, o.pay_amount, o.order_time, s.store_name " +
+            "FROM order_info o LEFT JOIN store_info s ON o.store_id = s.id " +
+            "WHERE o.order_no = #{orderNo}")
     OrderInfo getOrder(String orderNo);
+
+    @Select("SELECT o.order_no, o.product_name, o.product_spec, o.pay_amount, o.order_time, s.store_name " +
+            "FROM order_info o LEFT JOIN store_info s ON o.store_id = s.id " +
+            "WHERE o.order_no = #{orderNo}")
+    OrderInfoVO getOrderVO(String orderNo);
 
     @Insert("insert into after_sale_order (\n" +
             "        ticket_no,\n" +
@@ -45,7 +54,26 @@ public interface AfterSaleMapper {
             "    )")
     void addAfterSaleOrder(AfterSaleOrder afterSaleOrder);
 
-    @Select("select * from after_sale_order order by created_at desc ")
-    List<AfterSaleOrder> getAfterSaleOrder();
+    @Select("    select\n" +
+            "        a.ticket_no as ticketNo,\n" +
+            "        a.order_no as orderNo,\n" +
+            "        a.store_id as storeId,\n" +
+            "        s.store_name as storeName,\n" +
+            "        a.after_sale_type as afterSaleType,\n" +
+            "        a.apply_reason as applyReason,\n" +
+            "        a.evidence_images as evidenceImages,\n" +
+            "        a.ai_audit_result as aiAuditResult,\n" +
+            "        a.ai_confidence as aiConfidence,\n" +
+            "        a.ticket_status as ticketStatus,\n" +
+            "        a.created_at as createdAt\n" +
+            "    from after_sale_order a\n" +
+            "    left join store_info s on a.store_id = s.id\n" +
+            "    order by a.created_at desc")
+    List<AfterSaleOrderListVO> getAfterSaleOrder();
 
+    @Select("select order_no from after_sale_order where ticket_no=#{ticketNo}")
+    String getOrderNo(String ticketNo);
+
+    @Select("select * from after_sale_order where ticket_no=#{ticketNo}")
+    AfterSaleOrder getByTicketNo(String ticketNo);
 }

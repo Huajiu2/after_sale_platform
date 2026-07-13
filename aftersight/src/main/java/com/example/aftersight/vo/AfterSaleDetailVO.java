@@ -1,8 +1,6 @@
 package com.example.aftersight.vo;
 
-import com.example.aftersight.entity.AfterSaleOrder;
 import com.example.aftersight.entity.AiAuditLog;
-import com.example.aftersight.entity.OrderInfo;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -13,9 +11,9 @@ public class AfterSaleDetailVO {
 
     private String ticketNo;
 
-    private OrderInfo orderInfo;
+    private OrderInfoVO orderInfo;
 
-    private AfterSaleOrder afterSaleInfo;
+    private AfterSaleInfoVO afterSaleInfo;
 
     private List<RagEvidenceVO> ragEvidence;
 

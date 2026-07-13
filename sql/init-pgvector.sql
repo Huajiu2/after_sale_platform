@@ -4,7 +4,7 @@
 -- 适用版本：PostgreSQL 14+ / pgvector 0.5+
 -- ============================================================
 
--- 启用 pgvector 扩展（需要先 CREATE EXTENSION，需 superuser 权限）
+-- 启用 pgvector 扩展
 CREATE EXTENSION IF NOT EXISTS vector;
 
 -- ============================================================
@@ -13,27 +13,35 @@ CREATE EXTENSION IF NOT EXISTS vector;
 DROP TABLE IF EXISTS rag_document CASCADE;
 CREATE TABLE rag_document (
     id                  BIGSERIAL       PRIMARY KEY,
-    doc_code            VARCHAR(32)     NOT NULL UNIQUE COMMENT '文档编号，如 DOC001',
-    doc_name            VARCHAR(256)    NOT NULL COMMENT '文档名称',
-    doc_category        VARCHAR(32)     NOT NULL COMMENT '分类：platform_general / digital / fresh / history_case',
-    file_type           VARCHAR(16)     NOT NULL COMMENT '文件类型：pdf / docx / txt',
-    file_size           INT             NOT NULL COMMENT '文件大小（字节）',
-    file_path           VARCHAR(512)    NOT NULL COMMENT '存储路径',
-    original_name       VARCHAR(256)    NOT NULL COMMENT '原始文件名',
-
-    -- 向量化状态
-    chunk_count         INT             DEFAULT 0 COMMENT '切片数量',
-    vectorize_status    SMALLINT        NOT NULL DEFAULT 0 COMMENT '状态：0待解析 1解析中 2已向量化 3失败',
-    vectorize_error     VARCHAR(512)    DEFAULT '' COMMENT '向量化失败原因',
-
-    uploaded_by         VARCHAR(64)     DEFAULT '' COMMENT '上传人',
-    uploaded_at         TIMESTAMP       NOT NULL DEFAULT NOW() COMMENT '上传时间',
-    created_at          TIMESTAMP       NOT NULL DEFAULT NOW() COMMENT '创建时间',
-    updated_at          TIMESTAMP       NOT NULL DEFAULT NOW() COMMENT '更新时间'
+    doc_code            VARCHAR(32)     NOT NULL UNIQUE,
+    doc_name            VARCHAR(256)     NOT NULL,
+    doc_category        VARCHAR(32)     NOT NULL,
+    file_type           VARCHAR(16)     NOT NULL,
+    file_size           INT             NOT NULL,
+    file_path           VARCHAR(512)    NOT NULL,
+    original_name       VARCHAR(256)    NOT NULL,
+    chunk_count         INT             DEFAULT 0,
+    vectorize_status    SMALLINT        NOT NULL DEFAULT 0,
+    vectorize_error     VARCHAR(512)    DEFAULT '',
+    uploaded_by         VARCHAR(64)     DEFAULT '',
+    uploaded_at         TIMESTAMP       NOT NULL DEFAULT NOW(),
+    created_at          TIMESTAMP       NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMP       NOT NULL DEFAULT NOW()
 );
 
 COMMENT ON TABLE  rag_document       IS '知识库文档表';
-COMMENT ON COLUMN rag_document.vectorize_status IS '0待解析 1解析中 2已向量化 3失败';
+COMMENT ON COLUMN rag_document.doc_code IS '文档编号，如 DOC001';
+COMMENT ON COLUMN rag_document.doc_name IS '文档名称';
+COMMENT ON COLUMN rag_document.doc_category IS '分类：platform_general / digital / fresh / history_case';
+COMMENT ON COLUMN rag_document.file_type IS '文件类型：pdf / docx / txt';
+COMMENT ON COLUMN rag_document.file_size IS '文件大小（字节）';
+COMMENT ON COLUMN rag_document.file_path IS '存储路径';
+COMMENT ON COLUMN rag_document.original_name IS '原始文件名';
+COMMENT ON COLUMN rag_document.chunk_count IS '切片数量';
+COMMENT ON COLUMN rag_document.vectorize_status IS '状态：0待解析 1解析中 2已向量化 3失败';
+COMMENT ON COLUMN rag_document.vectorize_error IS '向量化失败原因';
+COMMENT ON COLUMN rag_document.uploaded_by IS '上传人';
+COMMENT ON COLUMN rag_document.uploaded_at IS '上传时间';
 
 CREATE INDEX idx_doc_category     ON rag_document(doc_category);
 CREATE INDEX idx_vectorize_status ON rag_document(vectorize_status);
@@ -44,33 +52,27 @@ CREATE INDEX idx_vectorize_status ON rag_document(vectorize_status);
 DROP TABLE IF EXISTS rag_chunk CASCADE;
 CREATE TABLE rag_chunk (
     id                  BIGSERIAL       PRIMARY KEY,
-    doc_id              BIGINT          NOT NULL REFERENCES rag_document(id) ON DELETE CASCADE COMMENT '所属文档ID',
-    chunk_index         INT             NOT NULL COMMENT '切片序号，从0开始',
-    chunk_text          TEXT            NOT NULL COMMENT '切片文本内容',
-
-    -- 向量嵌入（1536 维，对应 text-embedding-ada-002 或 bge-m3 等模型）
-    embedding           VECTOR(1536)    COMMENT '文本向量嵌入',
-
-    token_count         INT             DEFAULT 0 COMMENT '切片token数',
-    created_at          TIMESTAMP       NOT NULL DEFAULT NOW() COMMENT '创建时间'
+    doc_id              BIGINT          NOT NULL REFERENCES rag_document(id) ON DELETE CASCADE,
+    chunk_index         INT             NOT NULL,
+    chunk_text          TEXT            NOT NULL,
+    embedding           VECTOR(1536),
+    token_count         INT             DEFAULT 0,
+    created_at          TIMESTAMP       NOT NULL DEFAULT NOW()
 );
 
 COMMENT ON TABLE  rag_chunk       IS '文档切片表（向量检索核心）';
+COMMENT ON COLUMN rag_chunk.doc_id IS '所属文档ID';
+COMMENT ON COLUMN rag_chunk.chunk_index IS '切片序号，从0开始';
+COMMENT ON COLUMN rag_chunk.chunk_text IS '切片文本内容';
 COMMENT ON COLUMN rag_chunk.embedding IS '1536维文本向量嵌入';
+COMMENT ON COLUMN rag_chunk.token_count IS '切片token数';
 
--- ivfflat 索引：用于近似最近邻检索
--- lists 参数根据数据量调整，一般规则：lists = sqrt(行数) 或 行数/1000
--- 以下 lists=100 适合约 10 万级数据量
+-- ivfflat 索引
 CREATE INDEX idx_rag_chunk_embedding ON rag_chunk
     USING ivfflat (embedding vector_cosine_ops)
     WITH (lists = 100);
 
 CREATE INDEX idx_chunk_doc_id ON rag_chunk(doc_id);
-
--- 可选：如果数据量达到百万级以上，可改用 HNSW 索引（需 pgvector 0.6+）
--- CREATE INDEX idx_rag_chunk_hnsw ON rag_chunk
---     USING hnsw (embedding vector_cosine_ops)
---     WITH (m = 16, ef_construction = 200);
 
 -- ============================================================
 -- 3. 优质判例表（自迭代判例库）
@@ -78,25 +80,27 @@ CREATE INDEX idx_chunk_doc_id ON rag_chunk(doc_id);
 DROP TABLE IF EXISTS quality_case CASCADE;
 CREATE TABLE quality_case (
     id                  BIGSERIAL       PRIMARY KEY,
-    ticket_no           VARCHAR(32)     NOT NULL UNIQUE COMMENT '来源工单号',
-    case_category       VARCHAR(32)     NOT NULL COMMENT '判例分类：refund_only / return / complaint',
-
-    case_title          VARCHAR(256)    NOT NULL COMMENT '判例标题',
-    case_content        TEXT            NOT NULL COMMENT '判例正文（用于向量化检索）',
-
-    -- 审核信息
-    final_result        VARCHAR(256)    NOT NULL COMMENT '最终处理结果',
-    manual_remark       VARCHAR(1024)   DEFAULT '' COMMENT '人工备注',
-
-    -- 向量
-    embedding           VECTOR(1536)    COMMENT '判例向量',
-    is_active           BOOLEAN         DEFAULT TRUE COMMENT '是否生效',
-
-    created_at          TIMESTAMP       NOT NULL DEFAULT NOW() COMMENT '创建时间',
-    updated_at          TIMESTAMP       NOT NULL DEFAULT NOW() COMMENT '更新时间'
+    ticket_no           VARCHAR(32)     NOT NULL UNIQUE,
+    case_category       VARCHAR(32)     NOT NULL,
+    case_title          VARCHAR(256)    NOT NULL,
+    case_content        TEXT            NOT NULL,
+    final_result        VARCHAR(256)    NOT NULL,
+    manual_remark       VARCHAR(1024)   DEFAULT '',
+    embedding           VECTOR(1536),
+    is_active           BOOLEAN         DEFAULT TRUE,
+    created_at          TIMESTAMP       NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMP       NOT NULL DEFAULT NOW()
 );
 
 COMMENT ON TABLE quality_case IS '优质判例表（自迭代）';
+COMMENT ON COLUMN quality_case.ticket_no IS '来源工单号';
+COMMENT ON COLUMN quality_case.case_category IS '判例分类：refund_only / return / complaint';
+COMMENT ON COLUMN quality_case.case_title IS '判例标题';
+COMMENT ON COLUMN quality_case.case_content IS '判例正文（用于向量化检索）';
+COMMENT ON COLUMN quality_case.final_result IS '最终处理结果';
+COMMENT ON COLUMN quality_case.manual_remark IS '人工备注';
+COMMENT ON COLUMN quality_case.embedding IS '判例向量';
+COMMENT ON COLUMN quality_case.is_active IS '是否生效';
 
 CREATE INDEX idx_quality_case_embedding ON quality_case
     USING ivfflat (embedding vector_cosine_ops)
@@ -107,13 +111,6 @@ CREATE INDEX idx_case_category ON quality_case(case_category);
 -- ============================================================
 -- 工具函数：向量相似度检索
 -- ============================================================
-
--- 检索最相似的 TopN 切片（含文档来源）
--- 使用示例：
---   SELECT * FROM search_similar_chunks(
---     '[0.001, 0.002, ...]'::vector(1536),  -- 查询向量
---     3                                       -- TopN
---   );
 CREATE OR REPLACE FUNCTION search_similar_chunks(
     query_embedding VECTOR(1536),
     top_n INT DEFAULT 3
@@ -137,12 +134,11 @@ AS $$
         ROUND((1 - (c.embedding <=> query_embedding))::NUMERIC * 100, 1) AS similarity
     FROM rag_chunk c
     JOIN rag_document d ON d.id = c.doc_id
-    WHERE d.vectorize_status = 2        -- 已向量化
+    WHERE d.vectorize_status = 2
     ORDER BY c.embedding <=> query_embedding
     LIMIT top_n;
 $$;
 
--- 联合检索：同时搜索规则文档和优质判例
 CREATE OR REPLACE FUNCTION search_combined_knowledge(
     query_embedding VECTOR(1536),
     top_n INT DEFAULT 3
@@ -156,7 +152,6 @@ RETURNS TABLE(
 LANGUAGE SQL STABLE
 AS $$
     SELECT * FROM (
-        -- 规则文档
         SELECT
             c.chunk_text            AS content,
             d.doc_name              AS source,
@@ -168,7 +163,6 @@ AS $$
 
         UNION ALL
 
-        -- 优质判例
         SELECT
             q.case_content          AS content,
             CONCAT('【判例】', q.case_title) AS source,
@@ -182,7 +176,7 @@ AS $$
 $$;
 
 -- ============================================================
--- 种子数据：知识库文档
+-- 种子数据
 -- ============================================================
 INSERT INTO rag_document (doc_code, doc_name, doc_category, file_type, file_size, file_path, original_name,
                           chunk_count, vectorize_status, uploaded_by, uploaded_at)
@@ -207,11 +201,6 @@ VALUES
  '/data/knowledge/DOC005_apparel_rules.pdf', '服装鞋帽售后规则手册.pdf',
  85, 2, '管理员', '2026-05-10 11:00:00');
 
--- ============================================================
--- 种子数据：文档切片（示例数据 - 部分切片）
--- 注：实际生产环境中向量字段由 Embedding 模型生成
--- 此处仅插入文本内容，向量字段置空
--- ============================================================
 INSERT INTO rag_chunk (doc_id, chunk_index, chunk_text, token_count) VALUES
 (1, 0, '第一章 总则 1.1 为保障消费者权益，明确平台售后服务标准，特制定本规则。1.2 本规则适用于平台内所有入驻商家及消费者，自发布之日起生效。', 65),
 (1, 1, '1.3 平台有权根据法律法规及业务发展需要对本规则进行修订，修订后的规则将提前7天公示。', 42),
@@ -232,9 +221,6 @@ INSERT INTO rag_chunk (doc_id, chunk_index, chunk_text, token_count) VALUES
 (5, 2, '1.3 鞋类商品：试穿时请在地毯等柔软表面进行，鞋底有磨损痕迹的不予退换。', 42),
 (5, 10, '第三章 质量问题的判定标准 3.1 开线/脱缝：缝合处开裂长度超过2cm的属于质量问题。', 49);
 
--- ============================================================
--- 种子数据：优质判例
--- ============================================================
 INSERT INTO quality_case (ticket_no, case_category, case_title, case_content, final_result, manual_remark, is_active)
 VALUES
 ('SH20260512001', 'refund_only',
@@ -257,9 +243,7 @@ VALUES
  '用户申请仅退款声称未收到货，但物流系统显示已由本人签收（签收底单与用户姓名一致）。引用规则：平台规则第4.2条。人工审核确认：驳回申请。',
  '驳回申请', '物流底单显示本人签收，驳回用户售后申请。', TRUE);
 
--- ============================================================
--- 收尾：校验数据
--- ============================================================
+-- 校验数据
 SELECT 'PgVector初始化完成' AS status,
        (SELECT COUNT(*) FROM rag_document) AS doc_count,
        (SELECT COUNT(*) FROM rag_chunk)    AS chunk_count,

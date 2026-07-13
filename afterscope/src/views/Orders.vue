@@ -221,10 +221,18 @@
               <strong>{{ activeDetail.afterSaleInfo?.applyReason || '-' }}</strong>
             </div>
           </div>
-          <div class="evidence-list" v-if="activeDetail.afterSaleInfo?.evidenceImages?.length">
-            <div v-for="(img, index) in activeDetail.afterSaleInfo.evidenceImages" :key="img" class="evidence-item">
-              凭证 {{ index + 1 }}
-            </div>
+          <div class="evidence-list" v-if="validImages.length">
+            <el-image
+              v-for="(img, index) in validImages"
+              :key="img"
+              :src="img"
+              :preview-src-list="validImages"
+              :initial-index="index"
+              class="evidence-img"
+              fit="cover"
+              lazy
+              @error="onImageError(img)"
+            />
           </div>
         </section>
 
@@ -362,6 +370,18 @@ const auditForm = reactive({
   manualResult: 1,
   manualRemark: '',
 })
+
+// 记录加载失败的图片，自动隐藏
+const failedImgUrls = ref([])
+const validImages = computed(() => {
+  const all = activeDetail.value?.afterSaleInfo?.evidenceImages || []
+  return all.filter(img => !failedImgUrls.value.includes(img))
+})
+function onImageError(img) {
+  if (!failedImgUrls.value.includes(img)) {
+    failedImgUrls.value = [...failedImgUrls.value, img]
+  }
+}
 
 const metrics = computed(() => {
   const pendingAi = tickets.value.filter(item => item.ticketStatus === 0).length
@@ -811,11 +831,6 @@ onMounted(async () => {
   max-width: 100%;
 }
 
-.ticket-table :deep(.el-table__inner-wrapper),
-.ticket-table :deep(.el-table__body-wrapper),
-.ticket-table :deep(.el-scrollbar__wrap) {
-  overflow-x: hidden;
-}
 
 .ticket-table :deep(.el-table__header th) {
   background: #f8fafc;
@@ -991,17 +1006,24 @@ onMounted(async () => {
   flex-wrap: wrap;
 }
 
-.evidence-item {
+.evidence-img {
   width: 90px;
-  height: 64px;
+  height: 90px;
   border-radius: 8px;
-  background: linear-gradient(135deg, #e6f4ff, #f6ffed);
-  border: 1px solid #d6e4ff;
+  border: 1px solid #e8edf5;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.evidence-img-error {
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #1677ff;
-  font-size: 13px;
+  background: #f5f5f5;
+  color: #999;
+  font-size: 12px;
 }
 
 .rag-card {
