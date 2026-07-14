@@ -1,12 +1,14 @@
 package com.example.aftersight.mapper;
 
 import com.example.aftersight.entity.AfterSaleOrder;
+import com.example.aftersight.entity.OperationLog;
 import com.example.aftersight.entity.OrderInfo;
 import com.example.aftersight.vo.AfterSaleOrderListVO;
 import com.example.aftersight.vo.OrderInfoVO;
 import com.example.aftersight.vo.SubmitVO;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
 
@@ -76,4 +78,15 @@ public interface AfterSaleMapper {
 
     @Select("select * from after_sale_order where ticket_no=#{ticketNo}")
     AfterSaleOrder getByTicketNo(String ticketNo);
+
+    @Update("UPDATE after_sale_order SET ticket_status = #{ticketStatus}, ai_audit_status = #{aiAuditStatus}, " +
+            "manual_audit_by = #{manualAuditBy}, manual_audit_time = NOW(), " +
+            "manual_remark = #{manualRemark}, manual_result = #{manualResult} " +
+            "WHERE ticket_no = #{ticketNo} AND ticket_status = 2")
+    int updateManualAudit(AfterSaleOrder afterSaleOrder);
+
+
+    @Insert("INSERT INTO operation_log (biz_type, biz_id, operator, action, detail, ip_address, created_at) " +
+            "VALUES (#{bizType}, #{bizId}, #{operator}, #{action}, #{detail}, #{ipAddress}, NOW())")
+    void insertOperationLog(OperationLog log);
 }

@@ -1,8 +1,10 @@
 package com.example.aftersight.service.impl;
 
 import com.example.aftersight.common.Result;
+import com.example.aftersight.dto.ManualAuditDTO;
 import com.example.aftersight.dto.SubmitDTO;
 import com.example.aftersight.entity.AfterSaleOrder;
+import com.example.aftersight.entity.OperationLog;
 import com.example.aftersight.entity.OrderInfo;
 import com.example.aftersight.enums.AfterSaleTypeEnum;
 import com.example.aftersight.enums.TicketStatusEnum;
@@ -12,6 +14,7 @@ import com.example.aftersight.utils.ImageUploadUtils;
 import com.example.aftersight.vo.*;
 import com.google.gson.Gson;
 import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletRequest;
 import org.redisson.api.RBloomFilter;
 import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +24,8 @@ import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
@@ -218,9 +223,86 @@ public class AfterSaleServiceImpl implements AfterSaleService {
 
         afterSaleDetailVO.setTicketStatus(afterSaleOrder.getTicketStatus());
         TicketStatusEnum ticketEnum = TicketStatusEnum.fromCode(afterSaleOrder.getTicketStatus());
-        afterSaleDetailVO.setTicketStatusDesc(typeEnum != null ? typeEnum.getDesc() : "");
+        afterSaleDetailVO.setTicketStatusDesc(ticketEnum != null ? ticketEnum.getDesc() : "");
         afterSaleDetailVO.setCreatedAt(afterSaleOrder.getCreatedAt());
 
         return Result.success(afterSaleDetailVO);
+    }
+
+
+    @Transactional
+    @Override
+    public Result manualAuditSubmit(ManualAuditDTO auditDTO) {
+        ManualAuditResultVO auditResultVO = new ManualAuditResultVO();
+
+        AfterSaleOrder afterSaleOrder = afterSaleMapper.getByTicketNo(auditDTO.getTicketNo());
+        if (afterSaleOrder == null || afterSaleOrder.getTicketStatus() != 2) {
+            return Result.fail(402,"工单已办结/已驳回！");
+        }
+        Integer targetStatus;
+        //更新工单状态
+        if (auditDTO.getManualResult()==1){
+            targetStatus=1;
+            auditResultVO.setTicketStatusDesc(TicketStatusEnum.AI_CLOSED.getDesc());
+        }
+        else{
+            targetStatus=3;
+            auditResultVO.setTicketStatusDesc(TicketStatusEnum.REJECTED.getDesc());
+        }
+        afterSaleOrder.setTicketStatus(targetStatus);
+        afterSaleOrder.setAiAuditStatus(1);
+        afterSaleOrder.setManualAuditBy("管理员");  // 可以从登录上下文获取
+        afterSaleOrder.setManualRemark(auditDTO.getManualRemark());
+        afterSaleOrder.setManualResult(auditDTO.getManualResult());
+        int rows = afterSaleMapper.updateManualAudit(afterSaleOrder);
+        if (rows == 0) {
+            return Result.fail(500, "更新工单失败");
+        }
+
+        //记录操作日志
+        OperationLog log = new OperationLog();
+        log.setBizType("order_audit");
+        log.setBizId(auditDTO.getTicketNo());
+        log.setOperator("管理员");
+        log.setAction("人工审核 - " + (targetStatus == 1 ? "同意售后" : "驳回售后"));
+        log.setDetail(new Gson().toJson(auditDTO));
+        log.setIpAddress(getClientIp());
+        afterSaleMapper.insertOperationLog(log);
+
+        //更新redis仪表盘缓存（删除旧缓存，下次请求自动重建）
+        stringRedisTemplate.delete("cache:dashboard:stats");
+        String monthKey = "rank:store:monthly:" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMM"));
+        stringRedisTemplate.delete(monthKey);
+
+        auditResultVO.setTicketStatus(targetStatus);
+        auditResultVO.setCaseGenerated(StringUtils.hasText(auditDTO.getManualRemark()));
+        auditResultVO.setTicketNo(auditDTO.getTicketNo());
+        return Result.success(auditResultVO);
+    }
+
+    /**
+     * 获取客户端真实IP，支持反向代理（Nginx等）
+     */
+    private String getClientIp() {
+        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.currentRequestAttributes();
+        HttpServletRequest request = attributes.getRequest();
+        String ip = request.getHeader("X-Forwarded-For");
+        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getHeader("Proxy-Client-IP");
+        }
+        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getHeader("WL-Proxy-Client-IP");
+        }
+        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getHeader("X-Real-IP");
+        }
+        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getRemoteAddr();
+        }
+        // 多个代理的情况，取第一个真实IP
+        if (ip != null && ip.contains(",")) {
+            ip = ip.split(",")[0].trim();
+        }
+        return ip;
     }
 }

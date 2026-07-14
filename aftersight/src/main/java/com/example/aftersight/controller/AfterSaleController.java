@@ -2,6 +2,7 @@ package com.example.aftersight.controller;
 
 import com.example.aftersight.common.PageResult;
 import com.example.aftersight.common.Result;
+import com.example.aftersight.dto.ManualAuditDTO;
 import com.example.aftersight.dto.SubmitDTO;
 import com.example.aftersight.entity.AfterSaleOrder;
 import com.example.aftersight.service.AfterSaleService;
@@ -58,5 +59,13 @@ public class AfterSaleController {
     @GetMapping("/detail/{ticketNo}")
     public Result<AfterSaleDetailVO> getAfterSaleOrderDetail(@PathVariable String ticketNo){
         return afterSaleService.getAfterSaleOrderDetail(ticketNo);
+    }
+
+    /**
+     * 人工审核提交
+     */
+    @PostMapping("/manual-audit")
+    public Result manualAudit(@RequestBody ManualAuditDTO auditDTO){
+        return afterSaleService.manualAuditSubmit(auditDTO);
     }
 }

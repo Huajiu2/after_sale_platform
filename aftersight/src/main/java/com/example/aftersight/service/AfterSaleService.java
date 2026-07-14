@@ -1,6 +1,7 @@
 package com.example.aftersight.service;
 
 import com.example.aftersight.common.Result;
+import com.example.aftersight.dto.ManualAuditDTO;
 import com.example.aftersight.dto.SubmitDTO;
 import com.example.aftersight.entity.AfterSaleOrder;
 import com.example.aftersight.vo.AfterSaleDetailVO;
@@ -15,4 +16,7 @@ public interface AfterSaleService {
     List<AfterSaleOrderListVO> getAfterSaleOrder();
 
     Result<AfterSaleDetailVO> getAfterSaleOrderDetail(String ticketNo);
+
+
+    Result manualAuditSubmit(ManualAuditDTO auditDTO);
 }
