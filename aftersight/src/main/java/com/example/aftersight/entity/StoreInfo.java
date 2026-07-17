@@ -1,6 +1,8 @@
 package com.example.aftersight.entity;
 
 import lombok.Data;
+import org.springframework.data.annotation.Id;
+
 import java.time.LocalDateTime;
 
 /**
@@ -9,6 +11,7 @@ import java.time.LocalDateTime;
 @Data
 public class StoreInfo {
 
+    @Id
     private Long id;
 
     /** 店铺编码 */

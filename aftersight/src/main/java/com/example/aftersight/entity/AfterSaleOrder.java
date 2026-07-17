@@ -1,6 +1,8 @@
 package com.example.aftersight.entity;
 
 import lombok.Data;
+import org.springframework.data.annotation.Id;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
@@ -10,6 +12,7 @@ import java.time.LocalDateTime;
 @Data
 public class AfterSaleOrder {
 
+    @Id
     private Long id;
 
     /** 工单号，格式 SH+yyyyMMdd+3位序列 */

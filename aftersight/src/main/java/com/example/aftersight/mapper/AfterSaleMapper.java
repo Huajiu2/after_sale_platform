@@ -17,12 +17,12 @@ public interface AfterSaleMapper {
     @Select("select order_no from order_info")
     List<String> selectAllOrderNos();
 
-    @Select("SELECT o.order_no, o.product_name, o.product_spec, o.pay_amount, o.order_time, s.store_name " +
+    @Select("SELECT o.id,o.order_no,o.store_id,o.user_id, o.product_name, o.product_spec, o.pay_amount, o.order_time, s.store_name " +
             "FROM order_info o LEFT JOIN store_info s ON o.store_id = s.id " +
             "WHERE o.order_no = #{orderNo}")
     OrderInfo getOrder(String orderNo);
 
-    @Select("SELECT o.order_no, o.product_name, o.product_spec, o.pay_amount, o.order_time, s.store_name " +
+    @Select("SELECT o.id,o.order_no, o.product_name, o.product_spec, o.pay_amount, o.order_time, s.store_name " +
             "FROM order_info o LEFT JOIN store_info s ON o.store_id = s.id " +
             "WHERE o.order_no = #{orderNo}")
     OrderInfoVO getOrderVO(String orderNo);

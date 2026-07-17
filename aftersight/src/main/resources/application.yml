@@ -2,10 +2,12 @@ spring:
   application:
     name: aftersight
   datasource:
-      driver-class-name: com.mysql.cj.jdbc.Driver
-      url: jdbc:mysql://127.0.0.1:3306/after_sale_platform?serverTimezone=Asia/Shanghai&useUnicode=true
-      username: root
-      password: kaduoxi2
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/after_sale_platform?serverTimezone=Asia/Shanghai&useUnicode=true
+    username: root
+    password: kaduoxi2
+
+
   data:
     redis:
       host: 127.0.0.1

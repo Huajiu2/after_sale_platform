@@ -9,6 +9,8 @@ import com.example.aftersight.entity.OrderInfo;
 import com.example.aftersight.enums.AfterSaleTypeEnum;
 import com.example.aftersight.enums.TicketStatusEnum;
 import com.example.aftersight.mapper.AfterSaleMapper;
+import com.example.aftersight.mq.AuditMessageDTO;
+import com.example.aftersight.mq.MqProducer;
 import com.example.aftersight.service.AfterSaleService;
 import com.example.aftersight.utils.ImageUploadUtils;
 import com.example.aftersight.vo.*;
@@ -17,6 +19,7 @@ import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import org.redisson.api.RBloomFilter;
 import org.redisson.api.RedissonClient;
+import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -48,6 +51,9 @@ public class AfterSaleServiceImpl implements AfterSaleService {
 
     @Autowired
     private ImageUploadUtils uploadUtils;
+
+    @Autowired
+    private MqProducer mqProducer;
 
     // 前缀常量
     private static final String PREFIX = "SH";
@@ -153,7 +159,16 @@ public class AfterSaleServiceImpl implements AfterSaleService {
 
         afterSaleMapper.addAfterSaleOrder(afterSaleOrder);
 
+
         //投递MQ消息
+        AuditMessageDTO msg = new AuditMessageDTO();
+        BeanUtils.copyProperties(afterSaleOrder,msg);
+        Long msgSeq = stringRedisTemplate.opsForValue().increment("msg:seq:" + date);
+        msg.setMsgId("MSG" + date + String.format("%04d", msgSeq));
+        msg.setTimestamp(LocalDateTime.now());
+
+        mqProducer.sendAuditMessage(msg);
+
 
         submitVO.setTicketStatus(0);
         submitVO.setEstimatedTime("30秒内出结果");

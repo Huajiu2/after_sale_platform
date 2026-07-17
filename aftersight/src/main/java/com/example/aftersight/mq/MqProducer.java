@@ -12,7 +12,8 @@ public class MqProducer {
 
 
 
-    public void send(AuditMessageDTO auditMessageDTO){
+    //将售后工单投递给AI审核
+    public void sendAuditMessage(AuditMessageDTO auditMessageDTO){
         String routingkey;
         switch (auditMessageDTO.getAfterSaleType()){
             case 1: {
