@@ -17,7 +17,7 @@ public class AfterSaleDetailVO {
 
     private List<RagEvidenceVO> ragEvidence;
 
-    private AiAuditLog aiAuditDetail;
+    private AiAuditDetailVO aiAuditDetail;
 
     private Integer ticketStatus;
 

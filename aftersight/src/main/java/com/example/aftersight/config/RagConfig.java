@@ -5,7 +5,9 @@ import dev.langchain4j.data.document.loader.FileSystemDocumentLoader;
 import dev.langchain4j.data.document.splitter.DocumentByParagraphSplitter;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.data.segment.TextSegmentTransformer;
+import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.embedding.EmbeddingModel;
+import dev.langchain4j.model.openai.OpenAiEmbeddingModel;
 import dev.langchain4j.rag.content.retriever.ContentRetriever;
 import dev.langchain4j.rag.content.retriever.EmbeddingStoreContentRetriever;
 import dev.langchain4j.store.embedding.EmbeddingStoreIngestor;
@@ -54,7 +56,6 @@ public class RagConfig {
         return new DocumentByParagraphSplitter(1000,200);
     }
 
-
     //转换器：读取文本分片元数据里的 file_name，在正文前面拼接 【文件名】，方便 RAG 检索结果区分来源文档。
     @Bean
     public TextSegmentTransformer textSegmentTransformer(){
@@ -84,23 +85,23 @@ public class RagConfig {
     }
 
     //容器启动完成后自动执行。用来加载 rules/ 目录下的 md 文档进向量库
-    @Bean
-    public CommandLineRunner loadDocuments(EmbeddingStoreIngestor embeddingStoreIngestor){
-        return args -> {
-            if(!loadOnStartup){
-                log.info("RAG 文档加载已关闭，跳过");
-                return;
-            }
-            Path rulesDir = Path.of("src/main/resources/rules");
-            if (!Files.exists(rulesDir)){
-                log.warn("规则目录不存在: {}", rulesDir);
-                return;
-            }
-            List<Document> documents = FileSystemDocumentLoader.loadDocuments(rulesDir);
-            embeddingStoreIngestor.ingest(documents);
-            log.info("RAG 文档加载完成，共 {} 个文档", documents.size());
-        };
-    }
+//    @Bean
+//    public CommandLineRunner loadDocuments(EmbeddingStoreIngestor embeddingStoreIngestor){
+//        return args -> {
+//            if(!loadOnStartup){
+//                log.info("RAG 文档加载已关闭，跳过");
+//                return;
+//            }
+//            Path rulesDir = Path.of("src/main/resources/rules");
+//            if (!Files.exists(rulesDir)){
+//                log.warn("规则目录不存在: {}", rulesDir);
+//                return;
+//            }
+//            List<Document> documents = FileSystemDocumentLoader.loadDocuments(rulesDir);
+//            embeddingStoreIngestor.ingest(documents);
+//            log.info("RAG 文档加载完成，共 {} 个文档", documents.size());
+//        };
+//    }
 
 
 

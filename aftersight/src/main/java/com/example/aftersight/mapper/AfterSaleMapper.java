@@ -1,6 +1,7 @@
 package com.example.aftersight.mapper;
 
 import com.example.aftersight.entity.AfterSaleOrder;
+import com.example.aftersight.entity.AiAuditLog;
 import com.example.aftersight.entity.OperationLog;
 import com.example.aftersight.entity.OrderInfo;
 import com.example.aftersight.vo.AfterSaleOrderListVO;
@@ -89,4 +90,21 @@ public interface AfterSaleMapper {
     @Insert("INSERT INTO operation_log (biz_type, biz_id, operator, action, detail, ip_address, created_at) " +
             "VALUES (#{bizType}, #{bizId}, #{operator}, #{action}, #{detail}, #{ipAddress}, NOW())")
     void insertOperationLog(OperationLog log);
+
+    // 更新工单的 AI 审核结果
+    @Update("UPDATE after_sale_order SET ai_audit_result = #{aiAuditResult}, " +
+            "ai_confidence = #{aiConfidence}, ai_audit_status = #{aiAuditStatus}, " +
+            "ai_audit_time = NOW(), ticket_status = #{ticketStatus} " +
+            "WHERE ticket_no = #{ticketNo}")
+    void updateAiAudit(AfterSaleOrder afterSaleOrder);
+
+    // 插入 AI 审核日志
+    @Insert("INSERT INTO ai_audit_log (ticket_id, ticket_no, llm_model, llm_prompt, llm_response, " +
+            "llm_latency_ms, rag_chunk_ids, audit_conclusion, confidence, suggested_action, created_at) " +
+            "VALUES (#{ticketId}, #{ticketNo}, #{llmModel}, #{llmPrompt}, #{llmResponse}, " +
+            "#{llmLatencyMs}, #{ragChunkIds}, #{auditConclusion}, #{confidence}, #{suggestedAction}, NOW())")
+    void insertAiAuditLog(AiAuditLog auditLog);
+
+    @Select("SELECT * FROM ai_audit_log WHERE ticket_no = #{ticketNo} ORDER BY created_at DESC LIMIT 1")
+    AiAuditLog getAiAuditLog(String ticketNo);
 }

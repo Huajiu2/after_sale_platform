@@ -1,9 +1,11 @@
 package com.example.aftersight.service.impl;
 
+import com.example.aftersight.common.AiAuditResult;
 import com.example.aftersight.common.Result;
 import com.example.aftersight.dto.ManualAuditDTO;
 import com.example.aftersight.dto.SubmitDTO;
 import com.example.aftersight.entity.AfterSaleOrder;
+import com.example.aftersight.entity.AiAuditLog;
 import com.example.aftersight.entity.OperationLog;
 import com.example.aftersight.entity.OrderInfo;
 import com.example.aftersight.enums.AfterSaleTypeEnum;
@@ -14,9 +16,20 @@ import com.example.aftersight.mq.MqProducer;
 import com.example.aftersight.service.AfterSaleService;
 import com.example.aftersight.utils.ImageUploadUtils;
 import com.example.aftersight.vo.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.Gson;
+import dev.langchain4j.data.embedding.Embedding;
+import dev.langchain4j.data.segment.TextSegment;
+import dev.langchain4j.model.embedding.EmbeddingModel;
+import dev.langchain4j.rag.content.Content;
+import dev.langchain4j.rag.content.retriever.ContentRetriever;
+import dev.langchain4j.rag.query.Query;
+import dev.langchain4j.store.embedding.EmbeddingMatch;
+import dev.langchain4j.store.embedding.EmbeddingSearchRequest;
+import dev.langchain4j.store.embedding.EmbeddingStore;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RBloomFilter;
 import org.redisson.api.RedissonClient;
 import org.springframework.beans.BeanUtils;
@@ -31,6 +44,7 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -38,6 +52,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+@Slf4j
 @Service
 public class AfterSaleServiceImpl implements AfterSaleService {
 
@@ -53,7 +68,19 @@ public class AfterSaleServiceImpl implements AfterSaleService {
     private ImageUploadUtils uploadUtils;
 
     @Autowired
+    private ContentRetriever contentRetriever;
+
+    @Autowired
     private MqProducer mqProducer;
+
+    @Resource
+    private ObjectMapper objectMapper;
+
+    @Resource
+    private EmbeddingModel embeddingModel;
+
+    @Resource
+    private EmbeddingStore<TextSegment> embeddingStore;
 
     // 前缀常量
     private static final String PREFIX = "SH";
@@ -162,7 +189,7 @@ public class AfterSaleServiceImpl implements AfterSaleService {
 
         //投递MQ消息
         AuditMessageDTO msg = new AuditMessageDTO();
-        BeanUtils.copyProperties(afterSaleOrder,msg);
+        BeanUtils.copyProperties(afterSaleOrder, msg);
         Long msgSeq = stringRedisTemplate.opsForValue().increment("msg:seq:" + date);
         msg.setMsgId("MSG" + date + String.format("%04d", msgSeq));
         msg.setTimestamp(LocalDateTime.now());
@@ -196,6 +223,7 @@ public class AfterSaleServiceImpl implements AfterSaleService {
 
     /**
      * 工单列表详情查询实现类
+     *
      * @param ticketNo
      * @return
      */
@@ -206,9 +234,9 @@ public class AfterSaleServiceImpl implements AfterSaleService {
         AfterSaleDetailVO afterSaleDetailVO = new AfterSaleDetailVO();
         afterSaleDetailVO.setTicketNo(ticketNo);
 
-        AfterSaleOrder afterSaleOrder=afterSaleMapper.getByTicketNo(ticketNo);
-        if (afterSaleOrder==null){
-            return Result.fail(400,"工单不存在");
+        AfterSaleOrder afterSaleOrder = afterSaleMapper.getByTicketNo(ticketNo);
+        if (afterSaleOrder == null) {
+            return Result.fail(400, "工单不存在");
         }
         //orderInfo{}  订单信息
         String orderNo = afterSaleMapper.getOrderNo(ticketNo);
@@ -232,9 +260,62 @@ public class AfterSaleServiceImpl implements AfterSaleService {
         afterSaleDetailVO.setAfterSaleInfo(afterSaleInfoVO);
 
         //ragEvidence   RAG证据
-        afterSaleDetailVO.setRagEvidence(new ArrayList<>());
+        //ragEvidence  RAG检索依据
+//        List<Content> contents = contentRetriever.retrieve(Query.from(afterSaleOrder.getApplyReason()));
+//        List<RagEvidenceVO> ragEvidenceList = new ArrayList<>();
+//        int rank = 1;
+//        for (Content content : contents) {
+//            RagEvidenceVO ev = new RagEvidenceVO();
+//            ev.setRank(rank++);
+//            ev.setRuleContent(content.textSegment().text());
+//            ev.setSourceDoc(content.textSegment().metadata().getString("file_name"));
+//            ragEvidenceList.add(ev);
+//        }
+//        afterSaleDetailVO.setRagEvidence(ragEvidenceList);
+        //ragEvidence  RAG检索依据（含相似度分数）
+        List<RagEvidenceVO> ragEvidenceList = new ArrayList<>();
+        if (StringUtils.hasText(afterSaleOrder.getApplyReason())) {
+            Embedding queryEmbedding = embeddingModel.embed(afterSaleOrder.getApplyReason()).content();
+            EmbeddingSearchRequest searchRequest = EmbeddingSearchRequest.builder()
+                    .queryEmbedding(queryEmbedding)
+                    .maxResults(5)
+                    .minScore(0.75)
+                    .build();
+            List<EmbeddingMatch<TextSegment>> matches = embeddingStore.search(searchRequest).matches();
+            int rank = 1;
+            for (EmbeddingMatch<TextSegment> match : matches) {
+                RagEvidenceVO ev = new RagEvidenceVO();
+                ev.setRank(rank++);
+                ev.setSimilarity(BigDecimal.valueOf(match.score() * 100).setScale(2, java.math.RoundingMode.HALF_UP));
+                ev.setRuleContent(match.embedded().text());
+                ev.setSourceDoc(match.embedded().metadata().getString("file_name"));
+                ragEvidenceList.add(ev);
+            }
+        }
+        afterSaleDetailVO.setRagEvidence(ragEvidenceList);
+
 
         //AI审核详情
+        AiAuditLog auditLog = afterSaleMapper.getAiAuditLog(ticketNo);
+        if (auditLog != null) {
+            AiAuditDetailVO detailVO = new AiAuditDetailVO();
+            detailVO.setConclusion(auditLog.getAuditConclusion());
+            detailVO.setConfidence(auditLog.getConfidence());
+            detailVO.setSuggestedAction(auditLog.getSuggestedAction());
+            detailVO.setModelName("gpt-5.5");
+            detailVO.setLatencyMs(auditLog.getLlmLatencyMs());
+            detailVO.setAuditTime(auditLog.getCreatedAt());
+            // reason 从 llmResponse 的 JSON 里解析
+            if (StringUtils.hasText(auditLog.getLlmResponse())) {
+                try {
+                    AiAuditResult result = objectMapper.readValue(auditLog.getLlmResponse(), AiAuditResult.class);
+                    detailVO.setReason(result.getReason());
+                } catch (Exception e) {
+                    log.warn("解析AI审核结果JSON失败", e);
+                }
+            }
+            afterSaleDetailVO.setAiAuditDetail(detailVO);
+        }
 
         afterSaleDetailVO.setTicketStatus(afterSaleOrder.getTicketStatus());
         TicketStatusEnum ticketEnum = TicketStatusEnum.fromCode(afterSaleOrder.getTicketStatus());
@@ -252,16 +333,15 @@ public class AfterSaleServiceImpl implements AfterSaleService {
 
         AfterSaleOrder afterSaleOrder = afterSaleMapper.getByTicketNo(auditDTO.getTicketNo());
         if (afterSaleOrder == null || afterSaleOrder.getTicketStatus() != 2) {
-            return Result.fail(402,"工单已办结/已驳回！");
+            return Result.fail(402, "工单已办结/已驳回！");
         }
         Integer targetStatus;
         //更新工单状态
-        if (auditDTO.getManualResult()==1){
-            targetStatus=1;
+        if (auditDTO.getManualResult() == 1) {
+            targetStatus = 1;
             auditResultVO.setTicketStatusDesc(TicketStatusEnum.AI_CLOSED.getDesc());
-        }
-        else{
-            targetStatus=3;
+        } else {
+            targetStatus = 3;
             auditResultVO.setTicketStatusDesc(TicketStatusEnum.REJECTED.getDesc());
         }
         afterSaleOrder.setTicketStatus(targetStatus);
