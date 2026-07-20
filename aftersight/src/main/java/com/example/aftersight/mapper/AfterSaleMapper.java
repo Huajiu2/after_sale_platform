@@ -113,4 +113,8 @@ public interface AfterSaleMapper {
             "WHERE ticket_no = #{ticketNo} AND ticket_status = 2 " +
             "AND (assignee IS NULL OR assignee = '')")
     int assignByTicketNo( String ticketNo,  String assignee);
+
+
+    @Update("UPDATE after_sale_order SET retry_count = retry_count + 1 WHERE ticket_no = #{ticketNo}")
+    int incrementRetryCount(String ticketNo);
 }

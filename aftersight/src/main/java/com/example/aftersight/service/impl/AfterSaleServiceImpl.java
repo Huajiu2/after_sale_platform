@@ -51,6 +51,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 
 @Slf4j
@@ -421,6 +422,33 @@ public class AfterSaleServiceImpl implements AfterSaleService {
             log.info("成功指派 " + success + " 条，失败 " + failList.size() + " 条（可能已指派或状态非待人工）");
             return Result.fail(402,"成功指派 " + success + " 条，失败 " + failList.size() + " 条（可能已指派或状态非待人工）");
         }
+    }
+
+    @Transactional
+    @Override
+    public Result batchRetry(BatchAssignDTO dto) {
+        if (dto.getTicketNos()==null)
+            return Result.fail(400,"工单列表不能为空");
+        int success=0;
+        for (String ticketNo:dto.getTicketNos()){
+            AfterSaleOrder saleOrder = afterSaleMapper.getByTicketNo(ticketNo);
+            if (saleOrder.getTicketStatus()!=0)
+                continue;
+            AuditMessageDTO msg = new AuditMessageDTO();
+            BeanUtils.copyProperties(saleOrder,msg);
+            // 生成新消息ID
+            String date = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+            Long seq = stringRedisTemplate.opsForValue().increment("msg:seq:retry:" + date);
+            msg.setMsgId("RETRY" + date + String.format("%04d", seq));
+            msg.setTimestamp(LocalDateTime.now());
+            mqProducer.sendAuditMessage(msg);
+            success++;
+            afterSaleMapper.incrementRetryCount(ticketNo);
+        }
+        HashMap<String, Integer> map = new HashMap<>();
+        map.put("successCount",success);
+        map.put("failCount",dto.getTicketNos().size()-success);
+        return Result.success("成功重试"+success+"条工单",map);
     }
 
     /**

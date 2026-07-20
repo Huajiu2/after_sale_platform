@@ -73,9 +73,17 @@ public class AfterSaleController {
     /**
      * 批量指派客服
      */
-    @PostMapping("batch-assign")
+    @PostMapping("/batch-assign")
     public Result batchAssign(@RequestBody BatchAssignDTO assignDTO){
         return afterSaleService.batchAssign(assignDTO);
-
     }
+
+    /**
+     * 批量重试
+     */
+    @PostMapping("/batch-retry")
+    public Result batchRetry(@RequestBody BatchAssignDTO dto){
+        return afterSaleService.batchRetry(dto);
+    }
+
 }

@@ -22,4 +22,6 @@ public interface AfterSaleService {
     Result manualAuditSubmit(ManualAuditDTO auditDTO);
 
     Result batchAssign(BatchAssignDTO assignDTO);
+
+    Result batchRetry(BatchAssignDTO dto);
 }
