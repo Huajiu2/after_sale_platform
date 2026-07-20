@@ -12,10 +12,15 @@ import com.example.aftersight.vo.AfterSaleOrderListVO;
 import com.example.aftersight.vo.SubmitVO;
 import com.github.pagehelper.PageHelper;
 import com.github.pagehelper.PageInfo;
+import jakarta.servlet.http.HttpServletResponse;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @RestController
@@ -84,6 +89,14 @@ public class AfterSaleController {
     @PostMapping("/batch-retry")
     public Result batchRetry(@RequestBody BatchAssignDTO dto){
         return afterSaleService.batchRetry(dto);
+    }
+
+    /**
+     * 导出工单 Excel
+     */
+    @GetMapping("/export")
+    public void export(HttpServletResponse response) throws IOException {
+        afterSaleService.export(response);
     }
 
 }

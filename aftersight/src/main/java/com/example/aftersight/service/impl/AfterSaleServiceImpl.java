@@ -29,8 +29,14 @@ import dev.langchain4j.store.embedding.EmbeddingMatch;
 import dev.langchain4j.store.embedding.EmbeddingSearchRequest;
 import dev.langchain4j.store.embedding.EmbeddingStore;
 import jakarta.annotation.Resource;
+import jakarta.servlet.ServletOutputStream;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFRow;
+import org.apache.poi.xssf.usermodel.XSSFSheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.redisson.api.RBloomFilter;
 import org.redisson.api.RedissonClient;
 import org.springframework.beans.BeanUtils;
@@ -45,7 +51,11 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.io.OutputStream;
 import java.math.BigDecimal;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -424,6 +434,7 @@ public class AfterSaleServiceImpl implements AfterSaleService {
         }
     }
 
+
     @Transactional
     @Override
     public Result batchRetry(BatchAssignDTO dto) {
@@ -451,6 +462,73 @@ public class AfterSaleServiceImpl implements AfterSaleService {
         return Result.success("成功重试"+success+"条工单",map);
     }
 
+
+    @Override
+    public void export(HttpServletResponse response) throws IOException {
+        // ===================== 1. 设置下载响应头（关键！） =====================
+        // 告诉浏览器返回的是xlsx格式的文件
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        // 设置字符编码为UTF-8，防止中文乱码
+        response.setCharacterEncoding("utf-8");
+
+        // 处理中文文件名：URL编码 + 兼容主流浏览器
+        // 文件名必须编码，否则浏览器会出现中文乱码
+        String fileName = URLEncoder.encode("用户售后工单明细表", StandardCharsets.UTF_8)
+                .replaceAll("\\+", "%20"); // 替换空格的编码，保证文件名空格正常显示
+        // Content-Disposition: attachment 表示以附件形式下载
+        response.setHeader("Content-Disposition",
+                "attachment;filename*=utf-8''" + fileName + ".xlsx");
+
+        // ===================== 2. 创建Excel工作簿与工作表 =====================
+        XSSFWorkbook workbook = new XSSFWorkbook();
+        ServletOutputStream outputStream = response.getOutputStream();
+        XSSFSheet sheet = workbook.createSheet("用户售后工单表");
+
+        // ===================== 3. 创建表头并设置样式 =====================
+        // 定义表头列名
+        String[] headers = {
+                "工单号", "订单号", "店铺名称",
+                "售后类型", "申请原因", "是否有凭证",
+                "AI审核结果", "AI置信度",
+                "工单状态", "创建时间"
+        };
+        //创建第0行
+        XSSFRow row = sheet.createRow(0);
+        // 预定义表头样式：加粗、居中、灰色背景
+        CellStyle headerStyle = buildHeaderStyle(workbook);
+        // 循环创建表头单元格
+        for (int i = 0; i < headers.length; i++) {
+            Cell cell = row.createCell(i);
+            cell.setCellValue(headers[i]);
+            cell.setCellStyle(headerStyle);
+            // 设置列宽：单位是 1/256 个字符宽度，这里设置为20个字符宽
+            sheet.setColumnWidth(i, 20 * 256);
+        }
+
+        // ===================== 4. 填充业务数据 =====================
+        List<AfterSaleOrderListVO> afterSaleOrder = afterSaleMapper.getAfterSaleOrder();
+        int rowIndex = 1; // 数据从第1行开始（第0行是表头）
+        for (AfterSaleOrderListVO vo : afterSaleOrder) {
+            row = sheet.createRow(rowIndex++);
+            row.createCell(0).setCellValue(vo.getTicketNo());
+            row.createCell(1).setCellValue(vo.getOrderNo());
+            row.createCell(2).setCellValue(vo.getStoreName());
+            row.createCell(3).setCellValue(vo.getAfterSaleTypeDesc());
+            row.createCell(4).setCellValue(vo.getApplyReason());
+            row.createCell(5).setCellValue(vo.getHasEvidence() != null && vo.getHasEvidence() ? "有" : "无");
+            row.createCell(6).setCellValue(vo.getAiAuditResult());
+            row.createCell(7).setCellValue(vo.getAiConfidence() != null ? vo.getAiConfidence().doubleValue() : 0);
+            row.createCell(8).setCellValue(vo.getTicketStatusDesc());
+            row.createCell(9).setCellValue(vo.getCreatedAt() != null ? vo.getCreatedAt().toString() : "");
+        }
+
+        workbook.write(outputStream);
+        outputStream.flush();
+        log.info("导出为excel文件");
+        outputStream.close();
+        workbook.close();
+    }
+
     /**
      * 获取客户端真实IP，支持反向代理（Nginx等）
      */
@@ -475,5 +553,36 @@ public class AfterSaleServiceImpl implements AfterSaleService {
             ip = ip.split(",")[0].trim();
         }
         return ip;
+    }
+
+    /**
+     * 构建表头样式
+     */
+    private CellStyle buildHeaderStyle(Workbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        Font font = workbook.createFont();
+
+        // 字体加粗
+        font.setBold(true);
+        // 字体大小
+        font.setFontHeightInPoints((short) 12);
+        style.setFont(font);
+
+        // 水平居中
+        style.setAlignment(HorizontalAlignment.CENTER);
+        // 垂直居中
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
+
+        // 设置背景色（浅灰色）
+        style.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+
+        // 设置边框
+        style.setBorderTop(BorderStyle.THIN);
+        style.setBorderBottom(BorderStyle.THIN);
+        style.setBorderLeft(BorderStyle.THIN);
+        style.setBorderRight(BorderStyle.THIN);
+
+        return style;
     }
 }

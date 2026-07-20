@@ -550,8 +550,14 @@ async function retryTickets(ticketNos) {
 
 async function handleExport() {
   try {
-    await exportAfterSaleTickets(buildParams())
-    ElMessage.success('导出请求已提交')
+    const res = await exportAfterSaleTickets(buildParams())
+    const blob = new Blob([res], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = '用户售后工单明细表.xlsx'
+    a.click()
+    URL.revokeObjectURL(url)
   } catch (e) {
     ElMessage.error('导出失败')
   }

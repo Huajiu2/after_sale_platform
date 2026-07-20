@@ -8,7 +8,9 @@ import com.example.aftersight.entity.AfterSaleOrder;
 import com.example.aftersight.vo.AfterSaleDetailVO;
 import com.example.aftersight.vo.AfterSaleOrderListVO;
 import com.example.aftersight.vo.SubmitVO;
+import jakarta.servlet.http.HttpServletResponse;
 
+import java.io.IOException;
 import java.util.List;
 
 public interface AfterSaleService {
@@ -24,4 +26,6 @@ public interface AfterSaleService {
     Result batchAssign(BatchAssignDTO assignDTO);
 
     Result batchRetry(BatchAssignDTO dto);
+
+    void export(HttpServletResponse response) throws IOException;
 }
