@@ -11,10 +11,19 @@ public class Result<T> {
     private T data;
     private Long timestamp;
 
-    public static <T>Result<T> success(T data){
+    public static <T> Result<T> success(T data) {
         Result<T> res = new Result<>();
         res.setCode(200);
         res.setMessage("success");
+        res.setData(data);
+        res.setTimestamp(Instant.now().toEpochMilli());
+        return res;
+    }
+
+    public static <T> Result<T> success(String message, T data) {
+        Result<T> res = new Result<>();
+        res.setCode(200);
+        res.setMessage(message);
         res.setData(data);
         res.setTimestamp(Instant.now().toEpochMilli());
         return res;

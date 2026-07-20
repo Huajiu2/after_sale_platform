@@ -1,6 +1,7 @@
 package com.example.aftersight.service;
 
 import com.example.aftersight.common.Result;
+import com.example.aftersight.dto.BatchAssignDTO;
 import com.example.aftersight.dto.ManualAuditDTO;
 import com.example.aftersight.dto.SubmitDTO;
 import com.example.aftersight.entity.AfterSaleOrder;
@@ -19,4 +20,6 @@ public interface AfterSaleService {
 
 
     Result manualAuditSubmit(ManualAuditDTO auditDTO);
+
+    Result batchAssign(BatchAssignDTO assignDTO);
 }

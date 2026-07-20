@@ -8,6 +8,7 @@ import com.example.aftersight.vo.AfterSaleOrderListVO;
 import com.example.aftersight.vo.OrderInfoVO;
 import com.example.aftersight.vo.SubmitVO;
 import org.apache.ibatis.annotations.Insert;
+import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
@@ -107,4 +108,9 @@ public interface AfterSaleMapper {
 
     @Select("SELECT * FROM ai_audit_log WHERE ticket_no = #{ticketNo} ORDER BY created_at DESC LIMIT 1")
     AiAuditLog getAiAuditLog(String ticketNo);
+
+    @Update("UPDATE after_sale_order SET assignee = #{assignee}, updated_at = NOW() " +
+            "WHERE ticket_no = #{ticketNo} AND ticket_status = 2 " +
+            "AND (assignee IS NULL OR assignee = '')")
+    int assignByTicketNo( String ticketNo,  String assignee);
 }

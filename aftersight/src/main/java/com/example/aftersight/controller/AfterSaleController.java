@@ -2,6 +2,7 @@ package com.example.aftersight.controller;
 
 import com.example.aftersight.common.PageResult;
 import com.example.aftersight.common.Result;
+import com.example.aftersight.dto.BatchAssignDTO;
 import com.example.aftersight.dto.ManualAuditDTO;
 import com.example.aftersight.dto.SubmitDTO;
 import com.example.aftersight.entity.AfterSaleOrder;
@@ -67,5 +68,14 @@ public class AfterSaleController {
     @PostMapping("/manual-audit")
     public Result manualAudit(@RequestBody ManualAuditDTO auditDTO){
         return afterSaleService.manualAuditSubmit(auditDTO);
+    }
+
+    /**
+     * 批量指派客服
+     */
+    @PostMapping("batch-assign")
+    public Result batchAssign(@RequestBody BatchAssignDTO assignDTO){
+        return afterSaleService.batchAssign(assignDTO);
+
     }
 }

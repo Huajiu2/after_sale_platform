@@ -83,4 +83,7 @@ public class AfterSaleOrder {
 
     /** 更新时间 */
     private LocalDateTime updatedAt;
+
+    /** 指派人（客服） */
+    private String assignee;
 }

@@ -2,6 +2,7 @@ package com.example.aftersight.service.impl;
 
 import com.example.aftersight.common.AiAuditResult;
 import com.example.aftersight.common.Result;
+import com.example.aftersight.dto.BatchAssignDTO;
 import com.example.aftersight.dto.ManualAuditDTO;
 import com.example.aftersight.dto.SubmitDTO;
 import com.example.aftersight.entity.AfterSaleOrder;
@@ -373,6 +374,53 @@ public class AfterSaleServiceImpl implements AfterSaleService {
         auditResultVO.setCaseGenerated(StringUtils.hasText(auditDTO.getManualRemark()));
         auditResultVO.setTicketNo(auditDTO.getTicketNo());
         return Result.success(auditResultVO);
+    }
+
+
+    @Transactional
+    @Override
+    public Result batchAssign(BatchAssignDTO batchAssignDTO) {
+        if (batchAssignDTO.getTicketNos() == null || batchAssignDTO.getTicketNos().isEmpty()) {
+            return Result.fail(400, "工单号列表不能为空");
+        }
+        if (!StringUtils.hasText(batchAssignDTO.getAssignee())) {
+            return Result.fail(400, "指派人不能为空");
+        }
+
+        int success = 0;
+        List<String> failList = new ArrayList<>();
+
+        for (String ticketNo : batchAssignDTO.getTicketNos()) {
+            int rows = afterSaleMapper.assignByTicketNo(ticketNo, batchAssignDTO.getAssignee());
+            if (rows > 0) {
+                success++;
+            } else {
+                failList.add(ticketNo);
+            }
+        }
+
+        // 记录操作日志
+        if (success > 0) {
+            OperationLog log = new OperationLog();
+            log.setBizType("order_assign");
+            log.setBizId(String.join(",", batchAssignDTO.getTicketNos()));
+            log.setOperator(batchAssignDTO.getAssignee());
+            log.setAction("批量指派");
+            log.setDetail(new Gson().toJson(batchAssignDTO));
+            log.setIpAddress(getClientIp());
+            afterSaleMapper.insertOperationLog(log);
+        }
+
+        BatchAssignVO vo = new BatchAssignVO();
+        vo.setSuccessCount(success);
+        vo.setFailCount(failList.size());
+
+        if (failList.isEmpty()) {
+            return Result.success("成功指派 " + success + " 条工单给 " + batchAssignDTO.getAssignee(), vo);
+        } else {
+            log.info("成功指派 " + success + " 条，失败 " + failList.size() + " 条（可能已指派或状态非待人工）");
+            return Result.fail(402,"成功指派 " + success + " 条，失败 " + failList.size() + " 条（可能已指派或状态非待人工）");
+        }
     }
 
     /**

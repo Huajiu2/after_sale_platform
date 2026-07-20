@@ -506,11 +506,18 @@ async function handleBatchAssign() {
   }
   submitting.value = true
   try {
-    await batchAssignTickets({ ticketNos: selectedRows.value.map(item => item.ticketNo), assignee: assignee.value })
-    ElMessage.success(`已指派 ${selectedRows.value.length} 条工单给 ${assignee.value}`)
-    assignDialogVisible.value = false
-    assignee.value = ''
-    await loadTickets()
+    const res = await batchAssignTickets({
+      ticketNos: selectedRows.value.map(item => item.ticketNo),
+      assignee: assignee.value
+    })
+    if (res.code === 200) {
+      ElMessage.success(res.message || `已指派 ${selectedRows.value.length} 条工单给 ${assignee.value}`)
+      assignDialogVisible.value = false
+      assignee.value = ''
+      await loadTickets()
+    } else {
+      ElMessage.error(res.message || '批量指派失败')
+    }
   } catch (e) {
     ElMessage.error('批量指派失败')
   } finally {
