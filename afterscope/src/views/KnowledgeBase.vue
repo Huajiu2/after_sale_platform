@@ -97,14 +97,14 @@
             :limit="1"
             :on-change="handleFileChange"
             :on-exceed="() => ElMessage.warning('每次仅能上传 1 个文件')"
-            accept=".pdf,.doc,.docx,.txt"
+            accept=".md,.pdf,.doc,.docx,.txt"
           >
             <el-button type="primary" plain>
               <el-icon style="margin-right:4px"><FolderOpened /></el-icon>
               选择文件
             </el-button>
             <template #tip>
-              <span class="upload-tip">支持 PDF / Word / TXT，最大 20MB</span>
+              <span class="upload-tip">支持 MarkDown / PDF / Word / TXT，最大 20MB</span>
             </template>
           </el-upload>
         </el-form-item>
@@ -114,6 +114,7 @@
             <el-option label="数码售后规则" value="digital" />
             <el-option label="生鲜售后规则" value="fresh" />
             <el-option label="服饰售后规则" value="apparel" />
+            <el-option label="食品保健&医疗器械专项" value="medical" />
             <el-option label="历史判例" value="history_case" />
           </el-select>
         </el-form-item>
@@ -215,6 +216,7 @@ const categoryColorMap = {
   apparel: 'cyan',
   home_appliance: 'success',
   beauty: 'danger',
+  medical: 'warning',
   history_case: 'info'
 }
 function categoryTagType(category) {

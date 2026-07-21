@@ -58,7 +58,6 @@ public class AiAuditConsumer {
         processAudit(message);
     }
 
-
     @RabbitListener(bindings = @QueueBinding(
             value = @Queue(value = "queue.complaint", durable = "true"),
             exchange = @Exchange(value = "exchange.after.sale", type = ExchangeTypes.TOPIC),

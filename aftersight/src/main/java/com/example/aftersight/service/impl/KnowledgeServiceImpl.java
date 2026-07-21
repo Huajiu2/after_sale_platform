@@ -1,16 +1,31 @@
 package com.example.aftersight.service.impl;
 
 import com.example.aftersight.common.PageResult;
+import com.example.aftersight.common.Result;
+import com.example.aftersight.dto.DocParseMessageDTO;
 import com.example.aftersight.entity.KnowledgeDoc;
 import com.example.aftersight.mapper.KnowledgeMapper;
 import com.example.aftersight.service.KnowledgeService;
 import com.example.aftersight.vo.KnowledgeDocVO;
+import com.example.aftersight.vo.KnowledgeUploadVO;
 import com.github.pagehelper.PageHelper;
 import com.github.pagehelper.PageInfo;
 import jakarta.annotation.Resource;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -19,27 +34,51 @@ public class KnowledgeServiceImpl implements KnowledgeService {
     @Resource
     private KnowledgeMapper knowledgeMapper;
 
+    @Resource
+    private RabbitTemplate rabbitTemplate;
+
+    @Value("${app.knowledge.upload-dir}")
+    private String uploadPath;
+
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
+
     private static String categoryDesc(String category) {
         switch (category) {
-            case "platform_general": return "平台通用规则";
-            case "digital":           return "数码售后规则";
-            case "fresh":             return "生鲜售后规则";
-            case "apparel":           return "服饰售后规则";
-            case "home_appliance":    return "家居家电售后规则";
-            case "beauty":            return "美妆护肤售后规则";
-            case "history_case":      return "历史判例";
-            default:                  return category;
+            case "platform_general":
+                return "平台通用规则";
+            case "digital":
+                return "数码售后规则";
+            case "fresh":
+                return "生鲜售后规则";
+            case "apparel":
+                return "服饰售后规则";
+            case "home_appliance":
+                return "家居家电售后规则";
+            case "beauty":
+                return "美妆护肤售后规则";
+            case "medical":
+                return "食品保健&医疗器械专项售后规则";
+            case "history_case":
+                return "历史判例";
+            default:
+                return category;
         }
     }
 
     private static String statusDesc(Integer status) {
         if (status == null) return "未知";
         switch (status) {
-            case 0:  return "待解析";
-            case 1:  return "解析中";
-            case 2:  return "已向量化";
-            case 3:  return "失败";
-            default: return "未知";
+            case 0:
+                return "待解析";
+            case 1:
+                return "解析中";
+            case 2:
+                return "已向量化";
+            case 3:
+                return "失败";
+            default:
+                return "未知";
         }
     }
 
@@ -77,5 +116,66 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         result.setTotal(pageInfo.getTotal());
         result.setPages(pageInfo.getPages());
         return result;
+    }
+
+    @Override
+    public Result upload(MultipartFile file, String category) throws IOException {
+        //校验文件大小
+        if (file.getSize() > 20 * 1024 * 1024) {
+            return Result.fail(403, "文件大小不能超过20MB");
+        }
+        //校验文件类型
+        String filename = file.getOriginalFilename();
+        String ext = filename.substring(filename.lastIndexOf(".") + 1).toLowerCase();
+        if (!Set.of("md", "pdf", "doc", "docx", "txt").contains(ext)) {
+            return Result.fail(400, "仅支持 MarkDown / PDF / Word / TXT 格式");
+        }
+        //文件上传到服务器
+        // 1. 将配置的上传路径字符串转为 NIO Path 对象
+        Path path = Path.of(uploadPath);
+        // 2. 判断目录是否存在，不存在则递归创建多级目录（a/b/c 一并生成）
+        if (!Files.exists(path)) {
+            Files.createDirectories(path);
+        }
+        // 3. 生成唯一文件名：UUID + 原文件后缀，避免同名覆盖
+        String storedFileName = UUID.randomUUID() + "." + ext;
+        // 4. 将上传文件流写入目标路径
+        Path target = path.resolve(storedFileName);
+        // 自动关闭InputStream
+        try (InputStream is = file.getInputStream()) {
+            // REPLACE_EXISTING：文件存在则覆盖，避免报错
+            Files.copy(is, target, StandardCopyOption.REPLACE_EXISTING);
+        }
+
+        String date = LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd"));
+        Long seq = stringRedisTemplate.opsForValue().increment("doc:seq:" + date);
+        // 5. 插入数据库
+        KnowledgeDoc kd = new KnowledgeDoc();
+        kd.setDocCode(knowledgeMapper.nextDocCode());
+        kd.setDocName(filename);
+        kd.setCategory(category);
+        kd.setFileType(ext);
+        kd.setFileSize(file.getSize());
+        kd.setVectorizeStatus(0);  // 待解析
+        kd.setUploadedBy("管理员");
+        kd.setUploadedAt(LocalDateTime.now());
+        knowledgeMapper.insert(kd);
+
+        // 6. 投递 MQ 异步解析
+        DocParseMessageDTO msg = new DocParseMessageDTO();
+        msg.setDocId(kd.getId());
+        msg.setDocCode(kd.getDocCode());
+        msg.setFilePath(target.toString());
+        msg.setCategory(category);
+        rabbitTemplate.convertAndSend("exchange.knowledge", "doc.parse", msg);
+
+        // 7. 返回结果
+        KnowledgeUploadVO vo = new KnowledgeUploadVO();
+        vo.setDocId(kd.getId());
+        vo.setDocCode(kd.getDocCode());
+        vo.setDocName(filename);
+        vo.setVectorizeStatus(0);
+        vo.setVectorizeStatusDesc("待解析");
+        return Result.success("文档上传成功，已进入异步解析向量化队列", vo);
     }
 }
