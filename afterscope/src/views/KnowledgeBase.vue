@@ -209,10 +209,12 @@ function statusTagType(status) {
 }
 
 const categoryColorMap = {
-  platform_general: 'blue',
+  platform_general: '',
   digital: 'purple',
-  fresh: 'orange',
+  fresh: 'warning',
   apparel: 'cyan',
+  home_appliance: 'success',
+  beauty: 'danger',
   history_case: 'info'
 }
 function categoryTagType(category) {
