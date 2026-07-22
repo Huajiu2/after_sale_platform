@@ -4,6 +4,7 @@ import com.example.aftersight.entity.KnowledgeDoc;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Options;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
@@ -23,6 +24,12 @@ public interface KnowledgeMapper {
 
     List<KnowledgeDoc> selectList(@Param("docName") String docName);
 
+    @Select("SELECT * FROM knowledge_doc WHERE id = #{id}")
+    KnowledgeDoc selectById(Long id);
+
     @Update("UPDATE knowledge_doc SET vectorize_status = #{vectorizeStatus}, chunk_count = #{chunkCount} WHERE id = #{id}")
     void updateStatus(KnowledgeDoc kd);
+
+    @Delete("DELETE FROM knowledge_doc WHERE id = #{id}")
+    void deleteById(Long id);
 }

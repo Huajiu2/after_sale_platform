@@ -161,6 +161,7 @@ import {
   fetchKnowledgeList,
   uploadKnowledgeDoc,
   fetchDocChunks,
+  fetchDocStatus,
   reVectorizeDoc,
   deleteKnowledgeDoc
 } from '@/api/knowledge'
@@ -250,13 +251,35 @@ async function handleUploadSubmit() {
     const fd = new FormData()
     fd.append('file', uploadForm.file)
     fd.append('category', uploadForm.category)
-    await uploadKnowledgeDoc(fd)
+    const res = await uploadKnowledgeDoc(fd)
     ElMessage.success('文档上传成功，已进入异步解析向量化队列')
     uploadDialogVisible.value = false
     uploadForm.category = ''
     uploadForm.file = null
     if (uploadRef.value) uploadRef.value.clearFiles()
     fetchList()
+
+    // 轮询等待向量化完成
+    const docId = res.data?.docId
+    if (docId) {
+      const timer = setInterval(async () => {
+        try {
+          const statusRes = await fetchDocStatus(docId)
+          const status = statusRes.data?.vectorizeStatus
+          if (status === 2 || status === 3) {
+            clearInterval(timer)
+            await ElMessageBox.alert(
+              status === 2 ? '文档向量化完毕' : '文档向量化失败',
+              '提示',
+              { type: status === 2 ? 'success' : 'error' }
+            )
+            location.reload()
+          }
+        } catch (e) {
+          clearInterval(timer)
+        }
+      }, 3000)
+    }
   } catch (e) {
     ElMessage.error('上传失败')
   } finally {

@@ -6,11 +6,13 @@ import com.example.aftersight.dto.DocParseMessageDTO;
 import com.example.aftersight.entity.KnowledgeDoc;
 import com.example.aftersight.mapper.KnowledgeMapper;
 import com.example.aftersight.service.KnowledgeService;
+import com.example.aftersight.vo.DocChunkVO;
 import com.example.aftersight.vo.KnowledgeDocVO;
 import com.example.aftersight.vo.KnowledgeUploadVO;
 import com.github.pagehelper.PageHelper;
 import com.github.pagehelper.PageInfo;
 import jakarta.annotation.Resource;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -22,12 +24,16 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.sql.*;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 public class KnowledgeServiceImpl implements KnowledgeService {
 
@@ -138,9 +144,8 @@ public class KnowledgeServiceImpl implements KnowledgeService {
             Files.createDirectories(path);
         }
         // 3. 生成唯一文件名：UUID + 原文件后缀，避免同名覆盖
-        String storedFileName = UUID.randomUUID() + "." + ext;
         // 4. 将上传文件流写入目标路径
-        Path target = path.resolve(storedFileName);
+        Path target = path.resolve(file.getOriginalFilename());
         // 自动关闭InputStream
         try (InputStream is = file.getInputStream()) {
             // REPLACE_EXISTING：文件存在则覆盖，避免报错
@@ -148,7 +153,6 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         }
 
         String date = LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd"));
-        Long seq = stringRedisTemplate.opsForValue().increment("doc:seq:" + date);
         // 5. 插入数据库
         KnowledgeDoc kd = new KnowledgeDoc();
         kd.setDocCode(knowledgeMapper.nextDocCode());
@@ -177,5 +181,94 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         vo.setVectorizeStatus(0);
         vo.setVectorizeStatusDesc("待解析");
         return Result.success("文档上传成功，已进入异步解析向量化队列", vo);
+    }
+
+    @Override
+    public Result<HashMap<String, Object>> getDocChunks(Long docId, Integer page, Integer size) {
+        KnowledgeDoc doc = knowledgeMapper.selectById(docId);
+        if (doc == null) return Result.fail(404, "文档不存在");
+
+        String fileName = doc.getDocName();
+        int offset = (page - 1) * size;
+
+        String pgUrl = "jdbc:postgresql://127.0.0.1:5432/after_sale_platform";
+        String pgUser = "postgres";
+        String pgPwd = "kaduoxi2";
+
+        try (Connection conn = DriverManager.getConnection(pgUrl, pgUser, pgPwd)) {
+
+            // 查询总数
+            PreparedStatement countStmt = conn.prepareStatement(
+                    "SELECT COUNT(*) FROM rag_vectors WHERE metadata->>'file_name' = ?");
+            countStmt.setString(1, fileName);
+            ResultSet countRs = countStmt.executeQuery();
+            countRs.next();
+            int total = countRs.getInt(1);
+            countRs.close();
+            countStmt.close();
+
+            // 查询分页数据
+            PreparedStatement dataStmt = conn.prepareStatement(
+                    "SELECT text FROM rag_vectors WHERE metadata->>'file_name' = ? " +
+                            "ORDER BY embedding_id LIMIT ? OFFSET ?");
+            dataStmt.setString(1, fileName);
+            dataStmt.setInt(2, size);
+            dataStmt.setInt(3, offset);
+            ResultSet rs = dataStmt.executeQuery();
+
+            List<DocChunkVO> list = new ArrayList<>();
+            int idx = offset;
+            while (rs.next()) {
+                DocChunkVO vo = new DocChunkVO();
+                vo.setChunkId((long) ++idx);
+                vo.setChunkIndex(idx - 1);
+                vo.setChunkText(rs.getString("text"));
+                vo.setTokenCount(0);
+                list.add(vo);
+            }
+            rs.close();
+            dataStmt.close();
+
+            HashMap<String, Object> result = new HashMap<>();
+            result.put("docId", docId);
+            result.put("docName", fileName);
+            result.put("totalChunks", total);
+            result.put("records", list);
+            return Result.success(result);
+
+        } catch (SQLException e) {
+            log.error("查询切片失败: docId={}", docId, e);
+            return Result.fail(500, "查询切片失败");
+        }
+    }
+
+    @Override
+    public Result<KnowledgeDocVO> getDocById(Long id) {
+        KnowledgeDoc doc = knowledgeMapper.selectById(id);
+        if (doc == null) return Result.fail(404, "文档不存在");
+        return Result.success(toVO(doc));
+    }
+
+    @Override
+    public Result deleteDoc(Long docId) {
+        KnowledgeDoc doc = knowledgeMapper.selectById(docId);
+        if (doc == null) return Result.fail(404, "文档不存在");
+
+        // 1. 删除 pgvector 中的向量
+        String pgUrl = "jdbc:postgresql://127.0.0.1:5432/after_sale_platform";
+        try (Connection conn = DriverManager.getConnection(pgUrl, "postgres", "kaduoxi2")) {
+            PreparedStatement stmt = conn.prepareStatement(
+                    "DELETE FROM rag_vectors WHERE metadata->>'file_name' = ?");
+            stmt.setString(1, doc.getDocName());
+            stmt.executeUpdate();
+            stmt.close();
+        } catch (SQLException e) {
+            log.error("删除向量失败: docId={}", docId, e);
+        }
+
+        // 2. 删除 MySQL 记录
+        knowledgeMapper.deleteById(docId);
+
+        return Result.success("文档已删除");
     }
 }

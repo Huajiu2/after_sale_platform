@@ -36,6 +36,14 @@ export function reVectorizeDoc(docId) {
   })
 }
 
+/** 查询文档详情（轮询用） */
+export function fetchDocStatus(docId) {
+  return request({
+    url: `/knowledge/${docId}`,
+    method: 'get'
+  })
+}
+
 /** 3.5 删除文档 */
 export function deleteKnowledgeDoc(docId) {
   return request({
