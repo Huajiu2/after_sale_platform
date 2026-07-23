@@ -10,6 +10,7 @@ import dev.langchain4j.store.embedding.EmbeddingStoreIngestor;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.ExchangeTypes;
+import org.springframework.amqp.rabbit.annotation.Argument;
 import org.springframework.amqp.rabbit.annotation.Exchange;
 import org.springframework.amqp.rabbit.annotation.Queue;
 import org.springframework.amqp.rabbit.annotation.QueueBinding;
@@ -31,7 +32,11 @@ public class KnowledgeConsumer {
     private DocumentByParagraphSplitter paragraphSplitter;
 
     @RabbitListener(bindings = @QueueBinding(
-            value = @Queue(value = "queue.doc.parse", durable = "true"),
+            value = @Queue(value = "queue.doc.parse", durable = "true",
+                    arguments = {
+                        @Argument(name = "x-dead-letter-exchange", value = "exchange.dlx"),
+                        @Argument(name = "x-dead-letter-routing-key", value = "doc.parse.dlq")
+                    }),
             exchange = @Exchange(value = "exchange.knowledge", type = ExchangeTypes.DIRECT),
             key = "doc.parse"
     ))

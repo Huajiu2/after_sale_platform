@@ -60,6 +60,14 @@ public class KnowledgeController {
     }
 
     /**
+     * 3.4 重新向量化文档
+     */
+    @PostMapping("/re-vectorize/{docId}")
+    public Result reVectorize(@PathVariable Long docId) {
+        return knowledgeService.reVectorize(docId);
+    }
+
+    /**
      * 3.5 删除文档
      */
     @DeleteMapping("/{docId}")

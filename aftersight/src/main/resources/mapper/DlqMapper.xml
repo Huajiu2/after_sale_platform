@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.aftersight.mapper.DlqMapper">
+    <select id="selectList" resultType="com.example.aftersight.entity.DeadLetterMessage">
+        SELECT * FROM dead_letter_message
+        <where>
+            <if test='ticketNo != null and ticketNo != ""'>AND ticket_no = #{ticketNo}</if>
+            <if test='errorReason != null and errorReason != ""'>AND error_reason LIKE CONCAT('%', #{errorReason},
+                '%')
+            </if>
+            <if test='startTime != null'>AND error_time &gt;= #{startTime}</if>
+            <if test='endTime != null'>AND error_time &lt;= #{endTime}</if>
+        </where>
+        ORDER BY error_time DESC
+    </select>
+</mapper>

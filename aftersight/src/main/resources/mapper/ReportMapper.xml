@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.aftersight.mapper.ReportMapper">
+
+    <select id="monthlySummary" resultType="com.example.aftersight.vo.MonthlySummaryVO">
+        SELECT #{month} AS month,
+               COUNT(*)                                                        AS totalOrders,
+               SUM(CASE WHEN ai_audit_status = 1 THEN 1 ELSE 0 END)            AS aiProcessed,
+               SUM(CASE WHEN ticket_status = 2 THEN 1 ELSE 0 END)              AS manualIntervention,
+               SUM(CASE WHEN ticket_status IN (1, 3) THEN 1 ELSE 0 END)        AS approvedCount,
+               SUM(CASE WHEN ticket_status = 3 THEN 1 ELSE 0 END)              AS rejectedCount,
+               SUM(CASE WHEN ticket_status = 4 THEN 1 ELSE 0 END)              AS closedCount
+        FROM after_sale_order
+        WHERE DATE_FORMAT(created_at, '%Y%m') = #{month}
+    </select>
+
+    <select id="dailyRecords" resultType="com.example.aftersight.vo.DailyRecordVO">
+        SELECT DATE(created_at)                                                 AS date,
+               COUNT(*)                                                         AS totalOrders,
+               SUM(CASE WHEN ticket_status = 1 THEN 1 ELSE 0 END)               AS aiCompleted,
+               SUM(CASE WHEN ticket_status = 2 THEN 1 ELSE 0 END)               AS manualCompleted,
+               SUM(CASE WHEN ticket_status = 3 THEN 1 ELSE 0 END)               AS rejected,
+               SUM(CASE WHEN ticket_status = 4 THEN 1 ELSE 0 END)               AS closed
+        FROM after_sale_order
+        WHERE DATE_FORMAT(created_at, '%Y%m') = #{month}
+        GROUP BY DATE(created_at)
+        ORDER BY date
+    </select>
+
+    <select id="storeRanking" resultType="com.example.aftersight.vo.StoreRankingReportVO">
+        SELECT s.store_name                                                    AS storeName,
+               COUNT(a.id)                                                     AS orderCount,
+               ROUND(SUM(CASE WHEN a.ai_audit_status = 1 THEN 1 ELSE 0 END)
+                     / COUNT(a.id) * 100, 1)                                   AS aiProcessRate,
+               ROUND(SUM(CASE WHEN a.ticket_status = 3 THEN 1 ELSE 0 END)
+                     / COUNT(a.id) * 100, 1)                                   AS rejectedRate
+        FROM after_sale_order a
+                 JOIN store_info s ON a.store_id = s.id
+        WHERE DATE_FORMAT(a.created_at, '%Y%m') = #{month}
+        GROUP BY s.id, s.store_name
+        ORDER BY orderCount DESC
+    </select>
+
+    <select id="rateTrend" resultType="com.example.aftersight.vo.RateTrendRowVO">
+        SELECT DATE_FORMAT(created_at, '%Y-%m') AS label,
+               COUNT(*)                         AS total,
+               SUM(CASE WHEN ticket_status = 3 THEN 1 ELSE 0 END) AS rejected
+        FROM after_sale_order
+        WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL #{months} MONTH)
+        GROUP BY DATE_FORMAT(created_at, '%Y-%m')
+        ORDER BY label
+    </select>
+
+</mapper>

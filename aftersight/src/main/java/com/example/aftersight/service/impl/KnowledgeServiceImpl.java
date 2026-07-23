@@ -271,4 +271,37 @@ public class KnowledgeServiceImpl implements KnowledgeService {
 
         return Result.success("文档已删除");
     }
+
+    @Override
+    public Result reVectorize(Long docId) {
+        KnowledgeDoc doc = knowledgeMapper.selectById(docId);
+        if (doc == null) return Result.fail(404, "文档不存在");
+
+        // 1. 删除 pgvector 中的旧向量
+        String pgUrl = "jdbc:postgresql://127.0.0.1:5432/after_sale_platform";
+        try (Connection conn = DriverManager.getConnection(pgUrl, "postgres", "kaduoxi2")) {
+            PreparedStatement stmt = conn.prepareStatement(
+                    "DELETE FROM rag_vectors WHERE metadata->>'file_name' = ?");
+            stmt.setString(1, doc.getDocName());
+            stmt.executeUpdate();
+            stmt.close();
+        } catch (SQLException e) {
+            log.error("删除旧向量失败: docId={}", docId, e);
+        }
+
+        // 2. 重置状态为待解析
+        knowledgeMapper.resetVectorizeStatus(docId, 0);
+
+        // 3. 投递 MQ 重新处理
+        String date = LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd"));
+        Long seq = stringRedisTemplate.opsForValue().increment("doc:seq:" + date);
+        DocParseMessageDTO msg = new DocParseMessageDTO();
+        msg.setDocId(docId);
+        msg.setDocCode(doc.getDocCode());
+        msg.setFilePath("");
+        msg.setCategory(doc.getCategory());
+        rabbitTemplate.convertAndSend("exchange.knowledge", "doc.parse", msg);
+
+        return Result.success("文档已重新进入解析向量化队列", java.util.Map.of("docId", docId));
+    }
 }

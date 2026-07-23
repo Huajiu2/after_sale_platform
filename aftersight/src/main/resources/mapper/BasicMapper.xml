@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.aftersight.mapper.BasicMapper">
+
+    <select id="selectStores" resultType="com.example.aftersight.entity.StoreInfo">
+        SELECT * FROM store_info WHERE status = 1
+        <if test='keyword != null and keyword != ""'>
+            AND store_name LIKE CONCAT('%', #{keyword}, '%')
+        </if>
+        ORDER BY id
+    </select>
+</mapper>

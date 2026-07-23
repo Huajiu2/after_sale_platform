@@ -18,4 +18,6 @@ public interface KnowledgeService {
     Result<HashMap<String, Object>> getDocChunks(Long docId, Integer page, Integer size);
 
     Result deleteDoc(Long docId);
+
+    Result reVectorize(Long docId);
 }

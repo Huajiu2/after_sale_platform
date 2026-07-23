@@ -30,6 +30,9 @@ public interface KnowledgeMapper {
     @Update("UPDATE knowledge_doc SET vectorize_status = #{vectorizeStatus}, chunk_count = #{chunkCount} WHERE id = #{id}")
     void updateStatus(KnowledgeDoc kd);
 
+    @Update("UPDATE knowledge_doc SET vectorize_status = #{status}, chunk_count = 0 WHERE id = #{id}")
+    void resetVectorizeStatus(@Param("id") Long id, @Param("status") Integer status);
+
     @Delete("DELETE FROM knowledge_doc WHERE id = #{id}")
     void deleteById(Long id);
 }
