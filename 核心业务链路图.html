@@ -1,0 +1,176 @@
+<html style="margin:0;padding:0;">
+<title>电商智能售后中台 · 核心业务链路图</title>
+<div style="width:100%;box-sizing:border-box;max-width:860px;margin:0 auto;padding:20px 16px 40px;font-family:'Microsoft YaHei',system-ui,sans-serif;background:#f7f8fa;color:#1f2937;">
+  <div style="text-align:center;margin-bottom:6px;">
+    <div style="font-size:22px;font-weight:700;color:#111827;">电商智能售后中台 · 核心业务链路</div>
+    <div style="font-size:13px;color:#6b7280;margin-top:4px;">示意 · 依据真实代码绘制（AfterSaleServiceImpl / MqProducer / AiAuditConsumer / RagConfig）</div>
+  </div>
+
+  <!-- ===================== 图例 ===================== -->
+  <div style="display:flex;flex-wrap:wrap;gap:10px 18px;justify-content:center;margin:14px 0 8px;font-size:13px;color:#374151;">
+    <span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:12px;height:12px;border-radius:3px;background:#e0e7ff;border:1px solid #6366f1;display:inline-block;"></span>校验 / 数据库</span>
+    <span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:12px;height:12px;border-radius:3px;background:#fef3c7;border:1px solid #d97706;display:inline-block;"></span>Redis 中间件</span>
+    <span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:12px;height:12px;border-radius:3px;background:#dcfce7;border:1px solid #16a34a;display:inline-block;"></span>文件 / 消息队列</span>
+    <span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:12px;height:12px;border-radius:3px;background:#fce7f3;border:1px solid #db2777;display:inline-block;"></span>AI / RAG 链路</span>
+    <span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:12px;height:12px;border-radius:3px;background:#e5e7eb;border:1px solid #6b7280;display:inline-block;"></span>人工处理</span>
+  </div>
+
+  <!-- ===================== 区块一：提交链路 ===================== -->
+  <div style="border:2px solid #6366f1;border-radius:12px;padding:14px;margin-top:12px;background:#fff;">
+    <div style="font-size:15px;font-weight:700;color:#4338ca;margin-bottom:10px;">① 用户提交售后申请（POST /api/after-sale/submit · multipart）</div>
+    <div style="display:flex;flex-direction:column;gap:8px;font-size:14px;">
+
+      <div style="display:flex;align-items:center;gap:10px;background:#e0e7ff;border:1px solid #6366f1;border-radius:8px;padding:8px 12px;">
+        <span style="flex:0 0 26px;height:26px;border-radius:50%;background:#6366f1;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;">1</span>
+        <span>校验订单号非空 → 2. <b>Redisson 布隆过滤器</b> contains（<code style="background:#f3f4f6;padding:1px 6px;border-radius:4px;font-size:12px;">bloom:order_no</code>，100万容量 / 3%误判）拦截不存在的订单</span>
+      </div>
+      <div style="text-align:center;color:#9ca3af;line-height:1;">↓</div>
+
+      <div style="display:flex;align-items:center;gap:10px;background:#e0e7ff;border:1px solid #6366f1;border-radius:8px;padding:8px 12px;">
+        <span style="flex:0 0 26px;height:26px;border-radius:50%;background:#6366f1;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;">2</span>
+        <span>MySQL 查订单（<code style="background:#f3f4f6;padding:1px 6px;border-radius:4px;font-size:12px;">order_info</code> 联表 <code style="background:#f3f4f6;padding:1px 6px;border-radius:4px;font-size:12px;">store_info</code>）确认订单真实存在</span>
+      </div>
+      <div style="text-align:center;color:#9ca3af;line-height:1;">↓</div>
+
+      <div style="display:flex;align-items:center;gap:10px;background:#fef3c7;border:1px solid #d97706;border-radius:8px;padding:8px 12px;">
+        <span style="flex:0 0 26px;height:26px;border-radius:50%;background:#d97706;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;">3</span>
+        <span><b>Redis 令牌桶限流</b>（Lua 脚本原子执行，key=<code style="background:#f3f4f6;padding:1px 6px;border-radius:4px;font-size:12px;">rate:limit:token_bucket:{userId}</code>，容量5 / 每60秒补1令牌）→ 超限返回 429</span>
+      </div>
+      <div style="text-align:center;color:#9ca3af;line-height:1;">↓</div>
+
+      <div style="display:flex;align-items:center;gap:10px;background:#dcfce7;border:1px solid #16a34a;border-radius:8px;padding:8px 12px;">
+        <span style="flex:0 0 26px;height:26px;border-radius:50%;background:#16a34a;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;">4</span>
+        <span>凭证图片上传 <b>阿里云 OSS</b>，返回 URL 列表存 JSON</span>
+      </div>
+      <div style="text-align:center;color:#9ca3af;line-height:1;">↓</div>
+
+      <div style="display:flex;align-items:center;gap:10px;background:#fef3c7;border:1px solid #d97706;border-radius:8px;padding:8px 12px;">
+        <span style="flex:0 0 26px;height:26px;border-radius:50%;background:#d97706;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;">5</span>
+        <span>生成工单号 <code style="background:#f3f4f6;padding:1px 6px;border-radius:4px;font-size:12px;">SH + yyyyMMdd + 3位序号</code>（Redis INCR <code style="background:#f3f4f6;padding:1px 6px;border-radius:4px;font-size:12px;">ticket:seq:{date}</code>）</span>
+      </div>
+      <div style="text-align:center;color:#9ca3af;line-height:1;">↓</div>
+
+      <div style="display:flex;align-items:center;gap:10px;background:#e0e7ff;border:1px solid #6366f1;border-radius:8px;padding:8px 12px;">
+        <span style="flex:0 0 26px;height:26px;border-radius:50%;background:#6366f1;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;">6</span>
+        <span>落库 <code style="background:#f3f4f6;padding:1px 6px;border-radius:4px;font-size:12px;">after_sale_order</code>（ai_audit_status=0 待AI审核，ticket_status=0）→ 立即返回「提交成功，30秒内出结果」</span>
+      </div>
+      <div style="text-align:center;color:#9ca3af;line-height:1;">↓</div>
+
+      <div style="display:flex;align-items:center;gap:10px;background:#dcfce7;border:1px solid #16a34a;border-radius:8px;padding:8px 12px;">
+        <span style="flex:0 0 26px;height:26px;border-radius:50%;background:#16a34a;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;">7</span>
+        <span>投递 <b>RabbitMQ</b>（Topic 交换机 <code style="background:#f3f4f6;padding:1px 6px;border-radius:4px;font-size:12px;">exchange.after.sale</code>），按售后类型选路由键</span>
+      </div>
+
+      <!-- 路由分支 -->
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:2px;">
+        <div style="flex:1;min-width:150px;background:#f0fdf4;border:1px solid #16a34a;border-radius:8px;padding:8px 10px;text-align:center;font-size:13px;">
+          <div style="font-weight:700;color:#166534;">仅退款</div>
+          <div style="color:#4b5563;margin-top:2px;">routing key: <code style="background:#f3f4f6;padding:1px 5px;border-radius:4px;">refund.only.created</code></div>
+          <div style="color:#6b7280;font-size:12px;margin-top:2px;">→ queue.refund.only</div>
+        </div>
+        <div style="flex:1;min-width:150px;background:#f0fdf4;border:1px solid #16a34a;border-radius:8px;padding:8px 10px;text-align:center;font-size:13px;">
+          <div style="font-weight:700;color:#166534;">退货退款</div>
+          <div style="color:#4b5563;margin-top:2px;">routing key: <code style="background:#f3f4f6;padding:1px 5px;border-radius:4px;">refund.return.created</code></div>
+          <div style="color:#6b7280;font-size:12px;margin-top:2px;">→ queue.refund.return</div>
+        </div>
+        <div style="flex:1;min-width:150px;background:#f0fdf4;border:1px solid #16a34a;border-radius:8px;padding:8px 10px;text-align:center;font-size:13px;">
+          <div style="font-weight:700;color:#166534;">投诉</div>
+          <div style="color:#4b5563;margin-top:2px;">routing key: <code style="background:#f3f4f6;padding:1px 5px;border-radius:4px;">complaint.created</code></div>
+          <div style="color:#6b7280;font-size:12px;margin-top:2px;">→ queue.complaint</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="text-align:center;color:#9ca3af;font-size:18px;margin:6px 0;line-height:1;">↓ 异步消费（削峰填谷，接口已返回）</div>
+
+  <!-- ===================== 区块二：AI 审核 ===================== -->
+  <div style="border:2px solid #db2777;border-radius:12px;padding:14px;background:#fff;">
+    <div style="font-size:15px;font-weight:700;color:#be185d;margin-bottom:10px;">② AI 审核（AiAuditConsumer · RabbitListener 消费）</div>
+    <div style="display:flex;flex-direction:column;gap:8px;font-size:14px;">
+
+      <div style="display:flex;align-items:center;gap:10px;background:#fce7f3;border:1px solid #db2777;border-radius:8px;padding:8px 12px;">
+        <span style="flex:0 0 26px;height:26px;border-radius:50%;background:#db2777;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;">1</span>
+        <span><b>RAG 检索</b>：申请原因 embedding 化 → PgVector 余弦检索（minScore=0.75，取前5条规则，正文带【文件名】溯源）</span>
+      </div>
+      <div style="text-align:center;color:#9ca3af;line-height:1;">↓</div>
+
+      <div style="display:flex;align-items:center;gap:10px;background:#fce7f3;border:1px solid #db2777;border-radius:8px;padding:8px 12px;">
+        <span style="flex:0 0 26px;height:26px;border-radius:50%;background:#db2777;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;">2</span>
+        <span>组装提示词：订单信息 + 申请原因 + 参考规则；系统提示词 <code style="background:#f3f4f6;padding:1px 6px;border-radius:4px;font-size:12px;">system-prompt.txt</code>（角色/审核步骤/JSON强约束输出/few-shot）</span>
+      </div>
+      <div style="text-align:center;color:#9ca3af;line-height:1;">↓</div>
+
+      <div style="display:flex;align-items:center;gap:10px;background:#fce7f3;border:1px solid #db2777;border-radius:8px;padding:8px 12px;">
+        <span style="flex:0 0 26px;height:26px;border-radius:50%;background:#db2777;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;">3</span>
+        <span>调用 <b>DeepSeek</b>（LangChain4j AiService）→ 解析结构化 JSON：conclusion / confidence / reason / applicableRules / suggestedAction / riskFlags</span>
+      </div>
+      <div style="text-align:center;color:#9ca3af;line-height:1;">↓</div>
+
+      <div style="display:flex;align-items:center;gap:10px;background:#fce7f3;border:1px solid #db2777;border-radius:8px;padding:8px 12px;">
+        <span style="flex:0 0 26px;height:26px;border-radius:50%;background:#db2777;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;">4</span>
+        <span>写 <code style="background:#f3f4f6;padding:1px 6px;border-radius:4px;font-size:12px;">ai_audit_log</code>（prompt / response / 耗时 / 召回文档）→ <b>置信度分级裁决</b></span>
+      </div>
+
+      <!-- 置信度分流 -->
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:2px;">
+        <div style="flex:1;min-width:200px;background:#f0fdf4;border:1.5px solid #16a34a;border-radius:8px;padding:10px;text-align:center;">
+          <div style="font-weight:700;color:#166534;font-size:15px;">confidence ≥ 85</div>
+          <div style="color:#4b5563;margin-top:4px;font-size:13px;">ticket_status=1 <b>AI 自动办结</b><br/>（终态，无需人工）</div>
+        </div>
+        <div style="flex:1;min-width:200px;background:#fef3c7;border:1.5px solid #d97706;border-radius:8px;padding:10px;text-align:center;">
+          <div style="font-weight:700;color:#92400e;font-size:15px;">confidence &lt; 85</div>
+          <div style="color:#4b5563;margin-top:4px;font-size:13px;">ticket_status=2 <b>待人工审核</b><br/>（人工兜底）</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="text-align:center;color:#9ca3af;font-size:18px;margin:6px 0;line-height:1;">↓ 仅低置信度工单进入</div>
+
+  <!-- ===================== 区块三：人工审核 ===================== -->
+  <div style="border:2px solid #6b7280;border-radius:12px;padding:14px;background:#fff;">
+    <div style="font-size:15px;font-weight:700;color:#374151;margin-bottom:10px;">③ 人工审核（manualAuditSubmit · 状态机）</div>
+    <div style="display:flex;align-items:center;gap:10px;background:#e5e7eb;border:1px solid #6b7280;border-radius:8px;padding:8px 12px;font-size:14px;">
+      <span>关键 SQL：<code style="background:#f3f4f6;padding:1px 6px;border-radius:4px;font-size:12px;">UPDATE after_sale_order SET ... WHERE ticket_no=? AND ticket_status=2</code> —— 状态校验 + 更新合并为一条原子 UPDATE，防并发重复处理</span>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
+      <div style="flex:1;min-width:120px;background:#f0fdf4;border:1px solid #16a34a;border-radius:8px;padding:8px 10px;text-align:center;font-size:13px;">
+        <div style="font-weight:700;color:#166534;">manualResult=1</div>
+        <div style="color:#4b5563;margin-top:2px;">同意 → 办结（status=1）</div>
+      </div>
+      <div style="flex:1;min-width:120px;background:#fef2f2;border:1px solid #dc2626;border-radius:8px;padding:8px 10px;text-align:center;font-size:13px;">
+        <div style="font-weight:700;color:#991b1b;">manualResult=0</div>
+        <div style="color:#4b5563;margin-top:2px;">驳回 → 已驳回（status=3）</div>
+      </div>
+      <div style="flex:1;min-width:180px;background:#eef2ff;border:1px solid #6366f1;border-radius:8px;padding:8px 10px;text-align:center;font-size:13px;">
+        <div style="font-weight:700;color:#4338ca;">善后</div>
+        <div style="color:#4b5563;margin-top:2px;">写 operation_log + 删除统计/排行 Redis 缓存</div>
+      </div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:10px;font-size:12px;color:#6b7280;">
+      <span style="background:#f3f4f6;padding:3px 8px;border-radius:12px;">0 待AI审核</span>
+      <span>→</span>
+      <span style="background:#f3f4f6;padding:3px 8px;border-radius:12px;">1 AI办结 / 2 待人工</span>
+      <span>→</span>
+      <span style="background:#f3f4f6;padding:3px 8px;border-radius:12px;">3 已驳回</span>
+    </div>
+  </div>
+
+  <!-- ===================== 附：知识库/死信 ===================== -->
+  <div style="border:2px dashed #9ca3af;border-radius:12px;padding:12px 14px;margin-top:14px;background:#fff;">
+    <div style="font-size:14px;font-weight:700;color:#374151;margin-bottom:8px;">④ 配套链路（记忆要点）</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;font-size:13px;color:#374151;">
+      <div style="flex:1;min-width:230px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:8px 10px;">
+        <b style="color:#4338ca;">知识库 RAG 入库：</b>上传(md/pdf/doc/txt ≤20MB) → MQ解析队列 → 段落切片(1600/200) → embedding(text-embedding-v4, 1024维) → PgVector
+      </div>
+      <div style="flex:1;min-width:230px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:8px 10px;">
+        <b style="color:#4338ca;">死信链路：</b>queue.doc.parse 绑 DLX → exchange.dlx / doc.parse.dlq → 死信落库 dead_letter_message → 运维重试/删除
+      </div>
+      <div style="flex:1;min-width:230px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:8px 10px;">
+        <b style="color:#4338ca;">统计缓存：</b>cache:dashboard:stats（60s TTL）；店铺排行 ZSet rank:store:monthly:{yyyyMM}（10min TTL）
+      </div>
+    </div>
+  </div>
+</div>
+</html>

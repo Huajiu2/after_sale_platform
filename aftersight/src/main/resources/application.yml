@@ -7,7 +7,6 @@ spring:
     username: root
     password: kaduoxi2
 
-
   data:
     redis:
       host: 127.0.0.1

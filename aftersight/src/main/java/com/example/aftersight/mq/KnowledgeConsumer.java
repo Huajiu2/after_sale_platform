@@ -4,8 +4,8 @@ import com.example.aftersight.dto.DocParseMessageDTO;
 import com.example.aftersight.entity.KnowledgeDoc;
 import com.example.aftersight.mapper.KnowledgeMapper;
 import dev.langchain4j.data.document.Document;
+import dev.langchain4j.data.document.DocumentSplitter;
 import dev.langchain4j.data.document.loader.FileSystemDocumentLoader;
-import dev.langchain4j.data.document.splitter.DocumentByParagraphSplitter;
 import dev.langchain4j.store.embedding.EmbeddingStoreIngestor;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -29,7 +29,7 @@ public class KnowledgeConsumer {
     private KnowledgeMapper knowledgeMapper;
 
     @Resource
-    private DocumentByParagraphSplitter paragraphSplitter;
+    private DocumentSplitter paragraphSplitter;
 
     @RabbitListener(bindings = @QueueBinding(
             value = @Queue(value = "queue.doc.parse", durable = "true",

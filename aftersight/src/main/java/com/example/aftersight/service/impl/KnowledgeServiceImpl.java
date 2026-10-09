@@ -1,5 +1,6 @@
 package com.example.aftersight.service.impl;
 
+import com.example.aftersight.common.BusinessException;
 import com.example.aftersight.common.PageResult;
 import com.example.aftersight.common.Result;
 import com.example.aftersight.dto.DocParseMessageDTO;
@@ -45,6 +46,15 @@ public class KnowledgeServiceImpl implements KnowledgeService {
 
     @Value("${app.knowledge.upload-dir}")
     private String uploadPath;
+
+    @Value("${spring.datasource.postgres.jdbc-url}")
+    private String pgUrl;
+
+    @Value("${spring.datasource.postgres.username}")
+    private String pgUser;
+
+    @Value("${spring.datasource.postgres.password}")
+    private String pgPwd;
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
@@ -125,7 +135,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
     }
 
     @Override
-    public Result upload(MultipartFile file, String category) throws IOException {
+    public Result upload(MultipartFile file, String category) {
         //校验文件大小
         if (file.getSize() > 20 * 1024 * 1024) {
             return Result.fail(403, "文件大小不能超过20MB");
@@ -136,42 +146,47 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         if (!Set.of("md", "pdf", "doc", "docx", "txt").contains(ext)) {
             return Result.fail(400, "仅支持 MarkDown / PDF / Word / TXT 格式");
         }
-        //文件上传到服务器
-        // 1. 将配置的上传路径字符串转为 NIO Path 对象
-        Path path = Path.of(uploadPath);
-        // 2. 判断目录是否存在，不存在则递归创建多级目录（a/b/c 一并生成）
-        if (!Files.exists(path)) {
-            Files.createDirectories(path);
-        }
-        // 3. 生成唯一文件名：UUID + 原文件后缀，避免同名覆盖
-        // 4. 将上传文件流写入目标路径
-        Path target = path.resolve(file.getOriginalFilename());
-        // 自动关闭InputStream
-        try (InputStream is = file.getInputStream()) {
-            // REPLACE_EXISTING：文件存在则覆盖，避免报错
-            Files.copy(is, target, StandardCopyOption.REPLACE_EXISTING);
-        }
+        KnowledgeDoc kd = null;
+        try {
+            //文件上传到服务器
+            // 1. 将配置的上传路径字符串转为 NIO Path 对象
+            Path path = Path.of(uploadPath);
+            // 2. 判断目录是否存在，不存在则递归创建多级目录（a/b/c 一并生成）
+            if (!Files.exists(path)) {
+                Files.createDirectories(path);
+            }
+            // 3. 生成唯一文件名：UUID + 原文件后缀，避免同名覆盖
+            // 4. 将上传文件流写入目标路径
+            Path target = path.resolve(file.getOriginalFilename());
+            // 自动关闭InputStream
+            try (InputStream is = file.getInputStream()) {
+                // REPLACE_EXISTING：文件存在则覆盖，避免报错
+                Files.copy(is, target, StandardCopyOption.REPLACE_EXISTING);
+            }
 
-        String date = LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd"));
-        // 5. 插入数据库
-        KnowledgeDoc kd = new KnowledgeDoc();
-        kd.setDocCode(knowledgeMapper.nextDocCode());
-        kd.setDocName(filename);
-        kd.setCategory(category);
-        kd.setFileType(ext);
-        kd.setFileSize(file.getSize());
-        kd.setVectorizeStatus(0);  // 待解析
-        kd.setUploadedBy("管理员");
-        kd.setUploadedAt(LocalDateTime.now());
-        knowledgeMapper.insert(kd);
+            String date = LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd"));
+            // 5. 插入数据库
+            kd = new KnowledgeDoc();
+            kd.setDocCode(knowledgeMapper.nextDocCode());
+            kd.setDocName(filename);
+            kd.setCategory(category);
+            kd.setFileType(ext);
+            kd.setFileSize(file.getSize());
+            kd.setVectorizeStatus(0);  // 待解析
+            kd.setUploadedBy("管理员");
+            kd.setUploadedAt(LocalDateTime.now());
+            knowledgeMapper.insert(kd);
 
-        // 6. 投递 MQ 异步解析
-        DocParseMessageDTO msg = new DocParseMessageDTO();
-        msg.setDocId(kd.getId());
-        msg.setDocCode(kd.getDocCode());
-        msg.setFilePath(target.toString());
-        msg.setCategory(category);
-        rabbitTemplate.convertAndSend("exchange.knowledge", "doc.parse", msg);
+            // 6. 投递 MQ 异步解析
+            DocParseMessageDTO msg = new DocParseMessageDTO();
+            msg.setDocId(kd.getId());
+            msg.setDocCode(kd.getDocCode());
+            msg.setFilePath(target.toString());
+            msg.setCategory(category);
+            rabbitTemplate.convertAndSend("exchange.knowledge", "doc.parse", msg);
+        } catch (IOException e) {
+            throw BusinessException.serverError("文件上传失败"+e.getMessage());
+        }
 
         // 7. 返回结果
         KnowledgeUploadVO vo = new KnowledgeUploadVO();
@@ -191,11 +206,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         String fileName = doc.getDocName();
         int offset = (page - 1) * size;
 
-        String pgUrl = "jdbc:postgresql://127.0.0.1:5432/after_sale_platform";
-        String pgUser = "postgres";
-        String pgPwd = "kaduoxi2";
-
-        try (Connection conn = DriverManager.getConnection(pgUrl, pgUser, pgPwd)) {
+        try (Connection conn = getPgConnection()) {
 
             // 查询总数
             PreparedStatement countStmt = conn.prepareStatement(
@@ -245,7 +256,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
     @Override
     public Result<KnowledgeDocVO> getDocById(Long id) {
         KnowledgeDoc doc = knowledgeMapper.selectById(id);
-        if (doc == null) return Result.fail(404, "文档不存在");
+        if (doc == null) throw BusinessException.notFound("文档不存在");
         return Result.success(toVO(doc));
     }
 
@@ -255,8 +266,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         if (doc == null) return Result.fail(404, "文档不存在");
 
         // 1. 删除 pgvector 中的向量
-        String pgUrl = "jdbc:postgresql://127.0.0.1:5432/after_sale_platform";
-        try (Connection conn = DriverManager.getConnection(pgUrl, "postgres", "kaduoxi2")) {
+        try (Connection conn = getPgConnection()) {
             PreparedStatement stmt = conn.prepareStatement(
                     "DELETE FROM rag_vectors WHERE metadata->>'file_name' = ?");
             stmt.setString(1, doc.getDocName());
@@ -278,8 +288,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         if (doc == null) return Result.fail(404, "文档不存在");
 
         // 1. 删除 pgvector 中的旧向量
-        String pgUrl = "jdbc:postgresql://127.0.0.1:5432/after_sale_platform";
-        try (Connection conn = DriverManager.getConnection(pgUrl, "postgres", "kaduoxi2")) {
+        try (Connection conn = getPgConnection()) {
             PreparedStatement stmt = conn.prepareStatement(
                     "DELETE FROM rag_vectors WHERE metadata->>'file_name' = ?");
             stmt.setString(1, doc.getDocName());
@@ -303,5 +312,9 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         rabbitTemplate.convertAndSend("exchange.knowledge", "doc.parse", msg);
 
         return Result.success("文档已重新进入解析向量化队列", java.util.Map.of("docId", docId));
+    }
+
+    private Connection getPgConnection() throws SQLException {
+        return DriverManager.getConnection(pgUrl, pgUser, pgPwd);
     }
 }

@@ -38,6 +38,7 @@ import org.apache.poi.xssf.usermodel.XSSFRow;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.redisson.api.RBloomFilter;
+import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -63,6 +64,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
@@ -314,7 +316,7 @@ public class AfterSaleServiceImpl implements AfterSaleService {
             detailVO.setConclusion(auditLog.getAuditConclusion());
             detailVO.setConfidence(auditLog.getConfidence());
             detailVO.setSuggestedAction(auditLog.getSuggestedAction());
-            detailVO.setModelName("gpt-5.5");
+            detailVO.setModelName(auditLog.getLlmModel());
             detailVO.setLatencyMs(auditLog.getLlmLatencyMs());
             detailVO.setAuditTime(auditLog.getCreatedAt());
             // reason 从 llmResponse 的 JSON 里解析
@@ -338,9 +340,32 @@ public class AfterSaleServiceImpl implements AfterSaleService {
     }
 
 
+    //添加分布式锁，保障人工审核幂等
     @Transactional
     @Override
     public Result manualAuditSubmit(ManualAuditDTO auditDTO) {
+        //锁的key按工单号区分
+        String lockKey="lock:audit:"+auditDTO.getTicketNo();
+        //获取锁
+        RLock lock=redissonClient.getLock(lockKey);
+        //锁状态
+        boolean locked=false;
+        try{
+            //尝试上锁(最多等3s，过期时间30s)
+            locked=lock.tryLock(3,30, TimeUnit.SECONDS);
+            //如果没抢到锁
+            if(!locked){
+                return Result.fail(429,"该工单正在被其他管理员处理");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return Result.fail(500,"获取锁被中断");
+        }finally {
+            if (locked && lock.isHeldByCurrentThread()){
+                lock.unlock();
+            }
+        }
+
         ManualAuditResultVO auditResultVO = new ManualAuditResultVO();
 
         AfterSaleOrder afterSaleOrder = afterSaleMapper.getByTicketNo(auditDTO.getTicketNo());

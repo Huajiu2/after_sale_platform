@@ -3,8 +3,8 @@ package com.example.aftersight.config;
 import com.example.aftersight.entity.KnowledgeDoc;
 import com.example.aftersight.mapper.KnowledgeMapper;
 import dev.langchain4j.data.document.Document;
+import dev.langchain4j.data.document.DocumentSplitter;
 import dev.langchain4j.data.document.loader.FileSystemDocumentLoader;
-import dev.langchain4j.data.document.splitter.DocumentByParagraphSplitter;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.data.segment.TextSegmentTransformer;
 import dev.langchain4j.model.chat.ChatModel;
@@ -37,15 +37,24 @@ public class RagConfig {
     @Value("${app.rag.load-on-startup:false}")
     private Boolean loadOnStartup;
 
+    @Value("${spring.datasource.postgres.jdbc-url}")
+    private String pgUrl;
+
+    @Value("${spring.datasource.postgres.username}")
+    private String pgUser;
+
+    @Value("${spring.datasource.postgres.password}")
+    private String pgPwd;
+
     @Resource
     private KnowledgeMapper knowledgeMapper;
 
     @Bean
     public PgVectorEmbeddingStore pgVectorStore(){
         DataSource ds = DataSourceBuilder.create()
-                .url("jdbc:postgresql://127.0.0.1:5432/after_sale_platform")
-                .username("postgres")
-                .password("kaduoxi2")
+                .url(pgUrl)
+                .username(pgUser)
+                .password(pgPwd)
                 .driverClassName("org.postgresql.Driver")
                 .build();
 
@@ -59,8 +68,8 @@ public class RagConfig {
     }
 
     @Bean
-    public DocumentByParagraphSplitter paragraphSplitter(){
-        return new DocumentByParagraphSplitter(1600,200);
+    public DocumentSplitter paragraphSplitter(){
+        return new ClauseMarkdownSplitter();
     }
 
     //转换器：读取文本分片元数据里的 file_name，在正文前面拼接 【文件名】，方便 RAG 检索结果区分来源文档。
@@ -78,7 +87,7 @@ public class RagConfig {
     //把前面 4 个组件（切片器、转换器、向量模型、向量库）组装成一条流水线
     @Bean
     public EmbeddingStoreIngestor embeddingStoreIngestor(
-            DocumentByParagraphSplitter paragraphSplitter,
+            DocumentSplitter paragraphSplitter,
             TextSegmentTransformer textSegmentTransformer,
             PgVectorEmbeddingStore pgVectorStore,
             EmbeddingModel embeddingModel){
@@ -91,11 +100,11 @@ public class RagConfig {
 
     }
 
-    //容器启动完成后自动执行。用来加载 rules/ 目录下的 md 文档进向量库
+//    //容器启动完成后自动执行。用来加载 rules/ 目录下的 md 文档进向量库
 //    @Bean
 //    public CommandLineRunner loadDocuments(
 //            EmbeddingStoreIngestor embeddingStoreIngestor,
-//            DocumentByParagraphSplitter paragraphSplitter){
+//            DocumentSplitter paragraphSplitter){
 //        return args -> {
 //            if(!loadOnStartup){
 //                log.info("RAG 文档加载已关闭，跳过");

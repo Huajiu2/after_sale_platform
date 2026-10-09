@@ -18,6 +18,7 @@ import org.springframework.amqp.rabbit.annotation.Queue;
 import org.springframework.amqp.rabbit.annotation.QueueBinding;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -38,6 +39,10 @@ public class AiAuditConsumer {
 
     @Resource
     private ObjectMapper objectMapper;
+
+    @Value("${langchain4j.open-ai.chat-model.model-name}")
+    private String modelName;
+
 
     @RabbitListener(bindings = @QueueBinding(
             value = @Queue(value = "queue.refund.only", durable = "true"),
@@ -120,7 +125,7 @@ public class AiAuditConsumer {
             AiAuditLog auditLog = new AiAuditLog();
             auditLog.setTicketId(afterorder.getId());
             auditLog.setTicketNo(message.getTicketNo());
-            auditLog.setLlmModel("gpt-5.5");
+            auditLog.setLlmModel(modelName);
             auditLog.setLlmPrompt(userPrompt.toString());
             auditLog.setLlmResponse(result);
             auditLog.setLlmLatencyMs((int) latency);
