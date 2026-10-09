@@ -7,20 +7,21 @@ import com.example.aftersight.entity.AiAuditLog;
 import com.example.aftersight.entity.OrderInfo;
 import com.example.aftersight.mapper.AfterSaleMapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.rabbitmq.client.Channel;
 import dev.langchain4j.rag.content.Content;
 import dev.langchain4j.rag.content.retriever.ContentRetriever;
 import dev.langchain4j.rag.query.Query;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.ExchangeTypes;
-import org.springframework.amqp.rabbit.annotation.Exchange;
-import org.springframework.amqp.rabbit.annotation.Queue;
-import org.springframework.amqp.rabbit.annotation.QueueBinding;
-import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.amqp.rabbit.annotation.*;
+import org.springframework.amqp.support.AmqpHeaders;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.List;
 
@@ -44,35 +45,50 @@ public class AiAuditConsumer {
     private String modelName;
 
 
+
     @RabbitListener(bindings = @QueueBinding(
-            value = @Queue(value = "queue.refund.only", durable = "true"),
+            value = @Queue(value = "queue.refund.only", durable = "true",
+                    arguments = {
+                            @Argument(name = "x-dead-letter-exchange", value = "exchange.dlx"),
+                            @Argument(name = "x-dead-letter-routing-key", value = "refund.only.dlq")
+                    }),
             exchange = @Exchange(value = "exchange.after.sale", type = ExchangeTypes.TOPIC),
             key = "refund.only.created"
     ))
-    public void handleRefundOnly(AuditMessageDTO message) {
-        processAudit(message);
+    public void handleRefundOnly(AuditMessageDTO message,Channel channel,
+                                 @Header(AmqpHeaders.DELIVERY_TAG) long tag) {
+        processAudit(message,channel,tag);
     }
 
-
     @RabbitListener(bindings = @QueueBinding(
-            value = @Queue(value = "queue.refund.return", durable = "true"),
+            value = @Queue(value = "queue.refund.return", durable = "true",
+            arguments = {
+                    @Argument(name = "x-dead-letter-exchange", value = "exchange.dlx"),
+                    @Argument(name = "x-dead-letter-routing-key", value = "refund.return.dlq")
+            }),
             exchange = @Exchange(value = "exchange.after.sale", type = ExchangeTypes.TOPIC),
             key = "refund.return.created"
     ))
-    public void handleRefundReturn(AuditMessageDTO message) {
-        processAudit(message);
+    public void handleRefundReturn(AuditMessageDTO message, Channel channel,
+                                   @Header(AmqpHeaders.DELIVERY_TAG) long tag) {
+        processAudit(message,channel,tag);
     }
 
     @RabbitListener(bindings = @QueueBinding(
-            value = @Queue(value = "queue.complaint", durable = "true"),
+            value = @Queue(value = "queue.complaint", durable = "true",
+            arguments = {
+                    @Argument(name = "x-dead-letter-exchange", value = "exchange.dlx"),
+                    @Argument(name = "x-dead-letter-routing-key", value = "complaint.dlq")
+            }),
             exchange = @Exchange(value = "exchange.after.sale", type = ExchangeTypes.TOPIC),
             key = "complaint.created"
     ))
-    public void handleComplaint(AuditMessageDTO message) {
-        processAudit(message);
+    public void handleComplaint(AuditMessageDTO message,Channel channel,
+                                @Header(AmqpHeaders.DELIVERY_TAG) long tag) {
+        processAudit(message,channel,tag);
     }
 
-    private void processAudit(AuditMessageDTO message) {
+    private void processAudit(AuditMessageDTO message,Channel channel, long tag) {
         try {
             // 1. 检索相关规则
             List<Content> contents = contentRetriever.retrieve(Query.from(message.getApplyReason()));
@@ -108,6 +124,7 @@ public class AiAuditConsumer {
             // 5. 更新工单
             AfterSaleOrder afterorder = afterSaleMapper.getByTicketNo(message.getTicketNo());
             if (afterorder == null) {
+                channel.basicAck(tag,false);
                 log.error("工单不存在: {}", message.getTicketNo());
                 return;
             }
@@ -143,8 +160,13 @@ public class AiAuditConsumer {
 
             log.info("AI审核完成: ticketNo={}, conclusion={}, confidence={}",
                     message.getTicketNo(), auditResult.getConclusion(), auditResult.getConfidence());
-
+            channel.basicAck(tag,false);//确认消息消费成功
         } catch (Exception e) {
+            try{
+                channel.basicNack(tag,false,false);
+            }catch (IOException ex){
+                log.error("nack失败: tag={}", tag, ex);
+            }
             log.error("AI审核失败: ticketNo={}", message.getTicketNo(), e);
         }
     }

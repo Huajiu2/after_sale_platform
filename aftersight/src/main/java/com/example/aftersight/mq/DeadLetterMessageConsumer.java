@@ -2,6 +2,7 @@ package com.example.aftersight.mq;
 
 import com.example.aftersight.entity.DeadLetterMessage;
 import com.example.aftersight.mapper.DlqMapper;
+import com.rabbitmq.client.Channel;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.ExchangeTypes;
@@ -9,8 +10,11 @@ import org.springframework.amqp.rabbit.annotation.Exchange;
 import org.springframework.amqp.rabbit.annotation.Queue;
 import org.springframework.amqp.rabbit.annotation.QueueBinding;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.amqp.support.AmqpHeaders;
+import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
 
 @Slf4j
@@ -40,5 +44,42 @@ public class DeadLetterMessageConsumer {
         dlq.setDlqStatus(0);
         dlq.setErrorTime(LocalDateTime.now());
         dlqMapper.insert(dlq);
+    }
+
+
+    @RabbitListener(bindings = @QueueBinding(
+            value = @Queue(value = "queue.refund.only.dlq", durable = "true"),
+            exchange = @Exchange(value = "exchange.dlx", type = ExchangeTypes.DIRECT),
+            key = "refund.only.dlq"
+    ))
+    public void handleRefundReturnDlq(String message, Channel channel,
+                                    @Header(AmqpHeaders.DELIVERY_TAG) long tag) throws IOException {
+        log.warn("退货退款审核死信: {}", message);
+
+        channel.basicAck(tag, false);   // 死信队列也是 manual 模式，必须 ack
+    }
+
+    @RabbitListener(bindings = @QueueBinding(
+            value = @Queue(value = "queue.refund.only.dlq", durable = "true"),
+            exchange = @Exchange(value = "exchange.dlx", type = ExchangeTypes.DIRECT),
+            key = "refund.only.dlq"
+    ))
+    public void handleComplaintDlq(String message, Channel channel,
+                                    @Header(AmqpHeaders.DELIVERY_TAG) long tag) throws IOException {
+        log.warn("投诉审核死信: {}", message);
+
+        channel.basicAck(tag, false);   // 死信队列也是 manual 模式，必须 ack
+    }
+
+    @RabbitListener(bindings = @QueueBinding(
+            value = @Queue(value = "queue.refund.only.dlq", durable = "true"),
+            exchange = @Exchange(value = "exchange.dlx", type = ExchangeTypes.DIRECT),
+            key = "refund.only.dlq"
+    ))
+    public void handleRefundOnlyDlq(String message, Channel channel,
+                                    @Header(AmqpHeaders.DELIVERY_TAG) long tag) throws IOException {
+        log.warn("仅退款审核死信: {}", message);
+
+        channel.basicAck(tag, false);   // 死信队列也是 manual 模式，必须 ack
     }
 }

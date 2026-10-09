@@ -341,7 +341,7 @@ public class AfterSaleServiceImpl implements AfterSaleService {
 
 
     //添加分布式锁，保障人工审核幂等
-    @Transactional
+    //@Transactional
     @Override
     public Result manualAuditSubmit(ManualAuditDTO auditDTO) {
         //锁的key按工单号区分

@@ -69,9 +69,10 @@
 
 ## 输出格式
 
-你必须严格按照以下 JSON 格式输出审核结论，不得输出其他格式：
+你必须严格按照以下 JSON 格式输出审核结论，不得输出其他格式,
+请直接输出 JSON 对象，不要使用 Markdown 代码块（```）包裹，不要输出 JSON 以外的任何文字：
 
-```json
+
 {
   "conclusion": "同意/驳回/待人工",
   "confidence": 85.0,
@@ -80,7 +81,6 @@
   "suggestedAction": "suggested_action",
   "riskFlags": []
 }
-```
 
 ### 字段说明
 
