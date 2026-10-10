@@ -7,6 +7,8 @@ import com.example.aftersight.vo.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Resource;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -30,9 +32,13 @@ public class DashboardServiceImpl implements DashboardService {
     @Autowired
     private DashboardMapper dashboardMapper;
 
+    @Autowired
+    private RedissonClient redissonClient;
+
     /**
      * 仪表盘统计实现类
      */
+    //互斥重建加双重检查防缓存击穿
     @Override
     public Result<StatsVO> getStats() throws JsonProcessingException {
         StatsVO statsVO = new StatsVO();
@@ -44,49 +50,68 @@ public class DashboardServiceImpl implements DashboardService {
             StatsVO vo = objectMapper.readValue(json, StatsVO.class);
             return Result.success(vo);
         }
+        //如果缓存中没有数据，则尝试加锁
+        RLock lock= redissonClient.getLock("lock:dashboard:stats");\
+        boolean locked=false;
+        try{
+            locked = lock.tryLock(1, 10, TimeUnit.SECONDS);
+            if (locked){
+                //第二次检查缓存，因为可能在等待获取锁的过程中其它线程完成了缓存重建
+                json = stringRedisTemplate.opsForValue().get(key);
+                if(json!=null){
+                    StatsVO vo = objectMapper.readValue(json, StatsVO.class);
+                    return Result.success(vo);
+                }
+                //还是没有则重建缓存
+                return buildAndCacheStats(key);
+            }
+        }catch (InterruptedException e){
+            Thread.currentThread().interrupt();
+        }finally {
+            if (locked&& lock.isHeldByCurrentThread()){
+                lock.unlock();
+            }
+        }
+    }
+
+    private Result<StatsVO> buildAndCacheStats(String key) throws JsonProcessingException {
+        StatsVO statsVO = new StatsVO();
+
         // 今日数据
         Integer todayOrders = dashboardMapper.getTodayOrders();
         Integer todayAiComplete = dashboardMapper.getAiComplete();
         Integer pending = dashboardMapper.getPending();
         Integer todayDlq = dashboardMapper.getDlq();
-
         statsVO.setTodayNewOrders(todayOrders);
         statsVO.setTodayAiCompleted(todayAiComplete);
         statsVO.setPendingManual(pending);
         statsVO.setTodayDlqCount(todayDlq);
 
-        // AI通过率 = 今日AI办结 / (今日总处理数)
-        int totalProcessed = todayAiComplete
-                + (pending != null ? pending : 0)
-                + (dashboardMapper.getYesterdayOrders() != null ? 0 : 0); // 兜底，实际用今日驳回数
-        // 简化：通过率 = AI办结 / 今日新增
+        // AI 通过率 = AI办结 / 今日新增
         double passRate = (todayOrders == null || todayOrders == 0) ? 0.0
                 : (double) (todayAiComplete != null ? todayAiComplete : 0) / todayOrders * 100;
         statsVO.setAiPassRate(Math.round(passRate * 100.0) / 100.0);
 
-        // 昨日数据（用于环比）
+        // 昨日数据，用于环比
         Integer yestOrders = dashboardMapper.getYesterdayOrders();
         Integer yestAiComplete = dashboardMapper.getYesterdayAiComplete();
         Integer yestPending = dashboardMapper.getYesterdayPending();
         Integer yestDlq = dashboardMapper.getYesterdayDlq();
-
-        // 计算环比：(今日值 - 昨日值) / 昨日值 × 100
         statsVO.setTodayNewOrdersTrend(calcTrend(todayOrders, yestOrders));
         statsVO.setTodayAiCompletedTrend(calcTrend(todayAiComplete, yestAiComplete));
         statsVO.setPendingManualTrend(calcTrend(pending, yestPending));
         statsVO.setTodayDlqCountTrend(calcTrend(todayDlq, yestDlq));
 
-        // AI通过率环比
         double yestPassRate = (yestOrders == null || yestOrders == 0) ? 0.0
                 : (double) (yestAiComplete != null ? yestAiComplete : 0) / yestOrders * 100;
         statsVO.setAiPassRateTrend(Math.round((passRate - yestPassRate) * 100.0) / 100.0);
 
-        // 统计时间
-        statsVO.setStatisticsTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        statsVO.setStatisticsTime(LocalDateTime.now()
+                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
 
-        //存入redis中并设置过期时间
-        stringRedisTemplate.opsForValue().set(key,objectMapper.writeValueAsString(statsVO));
-        stringRedisTemplate.expire(key,60, TimeUnit.SECONDS);
+        // 写入缓存，60 秒过期
+        stringRedisTemplate.opsForValue().set(key, objectMapper.writeValueAsString(statsVO));
+        stringRedisTemplate.expire(key, 60, TimeUnit.SECONDS);
 
         return Result.success(statsVO);
     }
