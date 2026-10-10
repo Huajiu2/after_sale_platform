@@ -2,6 +2,7 @@ package com.example.aftersight.service.impl;
 
 import com.example.aftersight.common.AiAuditResult;
 import com.example.aftersight.common.Result;
+import com.example.aftersight.dto.AfterSaleQueryDTO;
 import com.example.aftersight.dto.BatchAssignDTO;
 import com.example.aftersight.dto.ManualAuditDTO;
 import com.example.aftersight.dto.SubmitDTO;
@@ -22,9 +23,7 @@ import com.google.gson.Gson;
 import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.embedding.EmbeddingModel;
-import dev.langchain4j.rag.content.Content;
 import dev.langchain4j.rag.content.retriever.ContentRetriever;
-import dev.langchain4j.rag.query.Query;
 import dev.langchain4j.store.embedding.EmbeddingMatch;
 import dev.langchain4j.store.embedding.EmbeddingSearchRequest;
 import dev.langchain4j.store.embedding.EmbeddingStore;
@@ -53,7 +52,6 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -228,10 +226,11 @@ public class AfterSaleServiceImpl implements AfterSaleService {
 
     /**
      * 工单列表分页查询实现类
+     * @param query
      */
     @Override
-    public List<AfterSaleOrderListVO> getAfterSaleOrder() {
-        return afterSaleMapper.getAfterSaleOrder();
+    public List<AfterSaleOrderListVO> getAfterSaleOrder(AfterSaleQueryDTO query) {
+        return afterSaleMapper.selectByQuery(query);
     }
 
 

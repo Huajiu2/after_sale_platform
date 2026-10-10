@@ -1,5 +1,6 @@
 package com.example.aftersight.mapper;
 
+import com.example.aftersight.dto.AfterSaleQueryDTO;
 import com.example.aftersight.entity.AfterSaleOrder;
 import com.example.aftersight.entity.AiAuditLog;
 import com.example.aftersight.entity.OperationLog;
@@ -15,6 +16,9 @@ import org.apache.ibatis.annotations.Update;
 import java.util.List;
 
 public interface AfterSaleMapper {
+
+
+    List<AfterSaleOrderListVO> selectByQuery(AfterSaleQueryDTO query);
 
     @Select("select order_no from order_info")
     List<String> selectAllOrderNos();

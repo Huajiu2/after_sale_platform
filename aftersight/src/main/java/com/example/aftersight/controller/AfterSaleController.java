@@ -2,6 +2,7 @@ package com.example.aftersight.controller;
 
 import com.example.aftersight.common.PageResult;
 import com.example.aftersight.common.Result;
+import com.example.aftersight.dto.AfterSaleQueryDTO;
 import com.example.aftersight.dto.BatchAssignDTO;
 import com.example.aftersight.dto.ManualAuditDTO;
 import com.example.aftersight.dto.SubmitDTO;
@@ -45,10 +46,11 @@ public class AfterSaleController {
      * 工单列表分页查询
      */
     @GetMapping("/list")
-    public Result<PageResult> getAfterSaleOrder(@RequestParam(defaultValue = "1") Integer page,
+    public Result<PageResult> getAfterSaleOrder(AfterSaleQueryDTO query,
+                                                @RequestParam(defaultValue = "1") Integer page,
                                                 @RequestParam(defaultValue = "10") Integer size){
         PageHelper.startPage(page,size);//开启分页查询
-        List<AfterSaleOrderListVO> afterSaleOrders=afterSaleService.getAfterSaleOrder();
+        List<AfterSaleOrderListVO> afterSaleOrders=afterSaleService.getAfterSaleOrder(query);
         PageInfo<AfterSaleOrderListVO> pageInfo = new PageInfo<>(afterSaleOrders);
         PageResult<AfterSaleOrderListVO> pageResult = new PageResult<>();
 

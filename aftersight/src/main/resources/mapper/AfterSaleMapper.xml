@@ -3,4 +3,38 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.example.aftersight.mapper.AfterSaleMapper">
 
+    <select id="selectByQuery" resultType="com.example.aftersight.vo.AfterSaleOrderListVO">
+        SELECT a.ticket_no AS ticketNo, a.order_no AS orderNo, a.store_id AS storeId,
+        s.store_name AS storeName, a.after_sale_type AS afterSaleType,
+        a.apply_reason AS applyReason, a.evidence_images AS evidenceImages,
+        a.ai_audit_result AS aiAuditResult, a.ai_confidence AS aiConfidence,
+        a.ticket_status AS ticketStatus, a.created_at AS createdAt
+        FROM after_sale_order a
+        LEFT JOIN store_info s ON a.store_id = s.id
+        LEFT JOIN order_info o ON a.order_id = o.id
+        <where>
+            <if test="orderNo != null and orderNo != ''">
+                AND a.order_no = #{orderNo}
+            </if>
+            <if test="userPhone != null and userPhone != ''">
+                AND o.user_phone LIKE CONCAT(#{userPhone}, '%')
+            </if>
+            <if test="storeId != null">
+                AND a.store_id = #{storeId}
+            </if>
+            <if test="afterSaleType != null">
+                AND a.after_sale_type = #{afterSaleType}
+            </if>
+            <if test="ticketStatus != null">
+                AND a.ticket_status = #{ticketStatus}
+            </if>
+            <if test="startTime != null and startTime != ''">
+                AND a.created_at &gt;= CONCAT(#{startTime}, ' 00:00:00')
+            </if>
+            <if test="endTime != null and endTime != ''">
+                AND a.created_at &lt;= CONCAT(#{endTime}, ' 23:59:59')
+            </if>
+        </where>
+        ORDER BY a.created_at DESC
+    </select>
 </mapper>

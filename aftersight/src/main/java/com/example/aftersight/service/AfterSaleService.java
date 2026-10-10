@@ -1,10 +1,10 @@
 package com.example.aftersight.service;
 
 import com.example.aftersight.common.Result;
+import com.example.aftersight.dto.AfterSaleQueryDTO;
 import com.example.aftersight.dto.BatchAssignDTO;
 import com.example.aftersight.dto.ManualAuditDTO;
 import com.example.aftersight.dto.SubmitDTO;
-import com.example.aftersight.entity.AfterSaleOrder;
 import com.example.aftersight.vo.AfterSaleDetailVO;
 import com.example.aftersight.vo.AfterSaleOrderListVO;
 import com.example.aftersight.vo.SubmitVO;
@@ -16,7 +16,7 @@ import java.util.List;
 public interface AfterSaleService {
     Result<SubmitVO> submit(SubmitDTO submitDTO);
 
-    List<AfterSaleOrderListVO> getAfterSaleOrder();
+    List<AfterSaleOrderListVO> getAfterSaleOrder(AfterSaleQueryDTO query);
 
     Result<AfterSaleDetailVO> getAfterSaleOrderDetail(String ticketNo);
 

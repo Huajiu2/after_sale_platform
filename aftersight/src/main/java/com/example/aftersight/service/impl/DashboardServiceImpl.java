@@ -51,7 +51,7 @@ public class DashboardServiceImpl implements DashboardService {
             return Result.success(vo);
         }
         //如果缓存中没有数据，则尝试加锁
-        RLock lock= redissonClient.getLock("lock:dashboard:stats");\
+        RLock lock= redissonClient.getLock("lock:dashboard:stats");
         boolean locked=false;
         try{
             locked = lock.tryLock(1, 10, TimeUnit.SECONDS);
@@ -72,6 +72,7 @@ public class DashboardServiceImpl implements DashboardService {
                 lock.unlock();
             }
         }
+        return buildAndCacheStats(key);
     }
 
     private Result<StatsVO> buildAndCacheStats(String key) throws JsonProcessingException {
